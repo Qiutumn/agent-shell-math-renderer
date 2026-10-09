@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-09
+
 ### Added
 
 - A third engine, `texres`: `agent-shell-math-renderer-engine` sends an
@@ -14,11 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pdflatex` of [texres](https://github.com/leoliu0/texres) and converts the
   PDF with `pdftocairo`. `C-u M-x agent-shell-math-renderer-refresh` deletes
   texres's `.fmt` file too. An equation texres rejects has a LaTeX error, so
-  it gets no fallback. Needs the `latex-to-svg-backend` release that adds the
-  texres engine.
+  it gets no fallback.
 
 ### Changed
 
+- Requires `latex-to-svg-backend` 0.12.1, which adds the texres engine and
+  reports a missing program the same way for every engine.
 - When a program of the engine is not found, the backend warns once per
   session, naming the engine and the program, and the equation's source stays
   as text. Before, the backend drew its placeholder panel. The commentary and
@@ -463,7 +466,8 @@ Initial release.
   `agent-shell-markdown-render-functions` hook and public range/cache helpers;
   require agent-shell 0.57.4 for `:inline-code-ranges`.
 
-[Unreleased]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.9.1...v0.10.0

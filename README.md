@@ -71,12 +71,12 @@ switch re-tints with no recompile. Sizing tracks the buffer font.
 - **[`agent-shell`](https://github.com/xenodium/agent-shell)** (0.66.1 or newer —
   the release with the backslash-escape pass and the right-label render-function
   suppression the hook relies on)
-- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.11.1
-  or newer (the release that reads its preamble options in the buffer that asks
-  for an equation, so a chat's `.dir-locals.el` reaches the compile) — the
+- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.12.1
+  or newer (the release that adds the texres engine and reports a missing
+  program the same way for every engine) — the
   backend (equation compile, caching, display-time tint/scale) is
   factored out into this standalone library. All typesetting knobs (LaTeX /
-  dvisvgm / RaTeX programs, preamble, cache directory, font scale, placeholder /
+  dvisvgm / RaTeX / texres programs, preamble, cache directory, font scale, placeholder /
   non-graphic behaviour) live in its `latex-to-svg-backend-*` customization group.
 - A **LaTeX toolchain** providing `latex` and `dvisvgm` (e.g. TeX Live /
   MacTeX; `dvisvgm` ships with TeX Live), or RaTeX's `render-svg` for the
