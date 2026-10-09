@@ -921,24 +921,26 @@ is fixed, so no graphical frame is needed."
   ;; The first request, the scheduled compile and the callback's re-query all
   ;; pass `:engine'.  The callback uses the engine captured at scheduling, so
   ;; changing the option while the compile runs does not change it.
-  (agent-shell-math-renderer-tests--with-backend-calls calls
-    (with-temp-buffer
-      (insert "xx")
-      (let ((agent-shell-math-renderer-engine 'ratex))
-        (agent-shell-math-renderer--render
-         (current-buffer) (point-min) (point-max) "x"))
-      (should (= 2 (length calls)))
-      (let ((callback (plist-get (cdar calls) :callback))
-            (agent-shell-math-renderer-engine 'latex))
-        (funcall callback))
-      (should (= 3 (length calls)))
-      (dolist (call calls)
-        (should (eq 'ratex (plist-get (cdr call) :engine)))))))
+  (dolist (engine '(ratex texres))
+    (agent-shell-math-renderer-tests--with-backend-calls calls
+      (with-temp-buffer
+        (insert "xx")
+        (let ((agent-shell-math-renderer-engine engine))
+          (agent-shell-math-renderer--render
+           (current-buffer) (point-min) (point-max) "x"))
+        (should (= 2 (length calls)))
+        (let ((callback (plist-get (cdar calls) :callback))
+              (agent-shell-math-renderer-engine 'latex))
+          (funcall callback))
+        (should (= 3 (length calls)))
+        (dolist (call calls)
+          (should (eq engine (plist-get (cdr call) :engine))))))))
 
 (ert-deftest agent-shell-math-renderer-fallback-per-engine ()
-  ;; `:fallback' is `latex' for `ratex', nil for `latex', and nil with the
-  ;; option off, at every call.
-  (dolist (case '((ratex t latex) (latex t nil) (ratex nil nil)))
+  ;; `:fallback' is `latex' for `ratex', nil for `latex' and `texres', and nil
+  ;; with the option off, at every call.  An equation texres rejects has a
+  ;; LaTeX error that `latex' rejects too.
+  (dolist (case '((ratex t latex) (latex t nil) (texres t nil) (ratex nil nil)))
     (agent-shell-math-renderer-tests--with-backend-calls calls
       (with-temp-buffer
         (insert "xx")
@@ -988,6 +990,7 @@ is fixed, so no graphical frame is needed."
   ;; `substitute-command-keys', which is what the user reads.
   (dolist (case '((ratex ratex "Typeset with RaTeX: \\{ f'(x) \\}")
                   (latex latex "Typeset with LaTeX: \\{ f'(x) \\}")
+                  (texres texres "Typeset with texres: \\{ f'(x) \\}")
                   (ratex latex
                          "Typeset with LaTeX (RaTeX could not parse it): \\{ f'(x) \\}")))
     (let ((agent-shell-math-renderer-engine (nth 0 case))
@@ -1093,9 +1096,11 @@ is fixed, so no graphical frame is needed."
 (ert-deftest agent-shell-math-renderer-refresh-recompiles-with-prefix ()
   ;; RECOMPILE (`C-u') invalidates each equation's string with the engine, and
   ;; with the fallback too when there is one, then renders it again -- in the
-  ;; current buffer only.  It deletes the buffer's `.fmt' file once when the
-  ;; engine or the fallback is LaTeX.
+  ;; current buffer only.  It deletes the buffer's `.fmt' files once when the
+  ;; engine or the fallback is LaTeX, or the engine is texres, which dumps a
+  ;; `.fmt' file of its own.
   (dolist (case '((latex t (latex) 1)
+                  (texres t (texres) 1)
                   (ratex t (ratex latex) 1)
                   (ratex nil (ratex) 0)))
     (let ((invalidated '())
@@ -1164,10 +1169,11 @@ is fixed, so no graphical frame is needed."
       (should (equal "$a+b$" (caar calls))))))
 
 (ert-deftest agent-shell-math-renderer-engine-safe-values ()
-  ;; A file-local engine is safe for the two engines and nothing else.
+  ;; A file-local engine is safe for the three engines and nothing else.
   (let ((safe (get 'agent-shell-math-renderer-engine 'safe-local-variable)))
     (should (funcall safe 'latex))
     (should (funcall safe 'ratex))
+    (should (funcall safe 'texres))
     (should-not (funcall safe nil))
     (should-not (funcall safe 'pdflatex))))
 

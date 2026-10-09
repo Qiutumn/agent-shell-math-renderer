@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A third engine, `texres`: `agent-shell-math-renderer-engine` sends an
+  equation to the backend with `:engine 'texres`, which compiles it with the
+  `pdflatex` of [texres](https://github.com/leoliu0/texres) and converts the
+  PDF with `pdftocairo`. `C-u M-x agent-shell-math-renderer-refresh` deletes
+  texres's `.fmt` file too. An equation texres rejects has a LaTeX error, so
+  it gets no fallback. Needs the `latex-to-svg-backend` release that adds the
+  texres engine.
+
+### Changed
+
+- When a program of the engine is not found, the backend warns once per
+  session, naming the engine and the program, and the equation's source stays
+  as text. Before, the backend drew its placeholder panel. The commentary and
+  README now say so.
+
 ## [0.12.0] - 2026-09-28
 
 ### Added

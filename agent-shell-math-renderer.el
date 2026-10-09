@@ -66,11 +66,11 @@
 ;; `display' text properties), while `latex-to-svg-backend' compiles each unique
 ;; equation to a color- and size-independent SVG (cached on disk by
 ;; content, tinted and scaled at display time).  Compilation is
-;; asynchronous; the image is overlaid when ready.  When the toolchain is
-;; absent or `latex-to-svg-backend-use-placeholder' is set, a placeholder panel
-;; boxing the raw LaTeX is shown instead.  The engine that typesets
-;; (LaTeX, or RaTeX without a TeX installation) is chosen by
-;; `agent-shell-math-renderer-engine'.  Backend settings (programs,
+;; asynchronous; the image is overlaid when ready.  When a program of
+;; the engine is not found, the backend warns once per session, naming
+;; the engine and the program, and the source stays as text.  The engine
+;; that typesets (LaTeX, RaTeX without a TeX installation, or texres) is
+;; chosen by `agent-shell-math-renderer-engine'.  Backend settings (programs,
 ;; preamble, cache directory, font scale, placeholder / non-graphic
 ;; behaviour) live in the `latex-to-svg-backend-*' customization group.
 
@@ -233,30 +233,34 @@ it is: the stretch cannot pull it left."
   :group 'agent-shell-math-renderer)
 
 (defcustom agent-shell-math-renderer-engine 'latex
-  "Engine that typesets the equations: the symbol `latex' or `ratex'.
+  "Engine that typesets the equations: the symbol `latex', `ratex' or `texres'.
 
 `latex' runs `latex' and `dvisvgm': full LaTeX, with any package the
 backend's preamble loads.  `ratex' runs RaTeX's `render-svg': no TeX
 installation, for the math KaTeX supports and no packages.  An
 equation RaTeX cannot parse is typeset with LaTeX instead, or keeps its
-source as text when `agent-shell-math-renderer-fallback' is nil.  Where the
-programs are is set in the backend (see
-`latex-to-svg-backend-latex-program' and
-`latex-to-svg-backend-ratex-program').
+source as text when `agent-shell-math-renderer-fallback' is nil.
+`texres' runs the `pdflatex' of texres, then `pdftocairo': full LaTeX
+with the LaTeX engine's preamble, from one program instead of a TeX
+installation.  Where the programs are is set in the backend (see
+`latex-to-svg-backend-latex-program',
+`latex-to-svg-backend-ratex-program' and
+`latex-to-svg-backend-texres-program').
 
 Passed to `latex-to-svg-backend' as `:engine'.  Each engine has its
 own cache entries, so switching back and forth does not recompile an
 equation already compiled by both.  Setting it with `setq',
 `setq-local' or Customize updates the equations on its own."
   :type '(choice (const :tag "LaTeX (latex + dvisvgm)" latex)
-                 (const :tag "RaTeX (render-svg)" ratex))
-  :safe (lambda (v) (memq v '(latex ratex)))
+                 (const :tag "RaTeX (render-svg)" ratex)
+                 (const :tag "texres (pdflatex + pdftocairo)" texres))
+  :safe (lambda (v) (memq v '(latex ratex texres)))
   :group 'agent-shell-math-renderer)
 
 (defcustom agent-shell-math-renderer-fallback t
   "Whether LaTeX typesets an equation the chosen engine cannot.
 
-When non-nil and `agent-shell-math-renderer-engine' is not `latex', a
+When non-nil and `agent-shell-math-renderer-engine' is `ratex', a
 formula that engine rejects, such as one using siunitx's `\\SI',
 `\\DeclareMathOperator' or an environment RaTeX lacks, is typeset with
 LaTeX instead: passed to `latex-to-svg-backend' as `:fallback'.  The
@@ -278,9 +282,10 @@ Customize updates the equations on its own."
 (defun agent-shell-math-renderer--fallback-for (engine)
   "Return the fallback engine for an equation typeset by ENGINE, or nil.
 That is `latex' when `agent-shell-math-renderer-fallback' is on and
-ENGINE is not already `latex'."
+ENGINE is `ratex'.  `texres' has none: it typesets with LaTeX, so an
+equation it rejects has a LaTeX error that `latex' rejects too."
   (and agent-shell-math-renderer-fallback
-       (not (memq engine '(nil latex)))
+       (eq engine 'ratex)
        'latex))
 
 (defcustom agent-shell-math-renderer-quiet nil
@@ -812,8 +817,11 @@ before each backslash, backquote and apostrophe makes
   (replace-regexp-in-string "[\\`']" "\\\\=\\&" latex))
 
 (defun agent-shell-math-renderer--engine-name (engine)
-  "Return the name of ENGINE to show a user: \"LaTeX\" or \"RaTeX\"."
-  (if (eq engine 'ratex) "RaTeX" "LaTeX"))
+  "Return the name of ENGINE to show a user: \"LaTeX\", \"RaTeX\" or \"texres\"."
+  (pcase engine
+    ('ratex "RaTeX")
+    ('texres "texres")
+    (_ "LaTeX")))
 
 (defun agent-shell-math-renderer--help-echo (doc latex engine fallback)
   "Return the `help-echo' of an equation LATEX, sent to the backend as DOC.
@@ -1073,18 +1081,20 @@ With RECOMPILE non-nil, first delete each region's cache entry with
 `latex-to-svg-backend-invalidate', for the engine and for its fallback
 when there is one, so the equation is compiled again.  That also
 deletes a failure record, so an engine that failed is tried again.
-When the engine or its fallback is `latex', the buffer's `.fmt' file is
-deleted too (`latex-to-svg-backend-invalidate-format'): it holds the
-files the preamble loads as they were when it was dumped, so an edit to
-one, such as the `macros.tex' of an `\\input{macros.tex}', would not
-reach the recompiled equations.  The next compile dumps it again."
+When the engine or its fallback is `latex' or `texres', the buffer's
+`.fmt' files are deleted too (`latex-to-svg-backend-invalidate-format',
+one per TeX program): each holds the files the preamble loads as they
+were when it was dumped, so an edit to one, such as the `macros.tex' of
+an `\\input{macros.tex}', would not reach the recompiled equations.  The
+next compile dumps them again."
   (when (buffer-live-p buffer)
     (with-current-buffer buffer
       (when (and recompile
-                 (memq 'latex
-                       (list agent-shell-math-renderer-engine
-                             (agent-shell-math-renderer--fallback-for
-                              agent-shell-math-renderer-engine)))
+                 (seq-intersection
+                  '(latex texres)
+                  (list agent-shell-math-renderer-engine
+                        (agent-shell-math-renderer--fallback-for
+                         agent-shell-math-renderer-engine)))
                  (text-property-not-all (point-min) (point-max)
                                         'agent-shell-math-renderer-source nil))
         (latex-to-svg-backend-invalidate-format))

@@ -80,8 +80,10 @@ switch re-tints with no recompile. Sizing tracks the buffer font.
   non-graphic behaviour) live in its `latex-to-svg-backend-*` customization group.
 - A **LaTeX toolchain** providing `latex` and `dvisvgm` (e.g. TeX Live /
   MacTeX; `dvisvgm` ships with TeX Live), or RaTeX's `render-svg` for the
-  `ratex` engine (see [Engine](#engine)). Without it, equations fall back to a
-  bordered placeholder or the raw LaTeX text.
+  `ratex` engine, or texres and `pdftocairo` for the `texres` engine (see
+  [Engine](#engine)). When a program of the requested engine is not found, the
+  backend warns once per session, naming the engine and the program, and the
+  equation stays as raw LaTeX text.
 - An Emacs build with **SVG support** for the images (raw LaTeX is shown
   otherwise).
 
@@ -293,12 +295,14 @@ equations:
 |-------|---------|----------|
 | `latex` (default) | `latex` + `dvisvgm` | Full LaTeX, with any package the backend's preamble loads. |
 | `ratex` | RaTeX's `render-svg` | The math KaTeX supports, with no packages and no TeX installation. |
+| `texres` | the `pdflatex` of [texres](https://github.com/leoliu0/texres) + `pdftocairo` | Full LaTeX, with the LaTeX engine's preamble options, and no TeX Live installation. |
 
 The choice is passed to the backend with each equation. Where the programs
 are is a backend setting (`latex-to-svg-backend-latex-program`,
-`latex-to-svg-backend-ratex-program`); the backend README's
+`latex-to-svg-backend-ratex-program`, `latex-to-svg-backend-texres-program`);
+the backend README's
 [Engines](https://github.com/alberti42/latex-to-svg-backend#engines)
-section covers installing RaTeX and what changes with it.
+section covers installing RaTeX and texres and what changes with each.
 
 ```elisp
 (setq agent-shell-math-renderer-engine 'ratex)
@@ -321,6 +325,11 @@ What RaTeX does not typeset:
   package in `latex-to-svg-backend-appended-preamble`, which RaTeX does not
   read. Define macros in `latex-to-svg-backend-ratex-macros` instead.
 - **Environments KaTeX does not have**, such as `multline` and `eqnarray`.
+
+What works with `texres`: the same as with `latex`.
+`C-u M-x agent-shell-math-renderer-refresh` deletes texres's `.fmt` file too.
+An equation texres rejects has a LaTeX error, so
+`agent-shell-math-renderer-fallback` does not apply: its source stays as text.
 
 #### Falling back to LaTeX
 
@@ -401,8 +410,8 @@ group (`M-x customize-group RET agent-shell-math-renderer`):
 | `agent-shell-math-renderer-delimiters` | `(bracket dollar)` | Which display delimiters to recognize: `bracket` (`\[…\]`) and/or `dollar` (`$$…$$`). |
 | `agent-shell-math-renderer-fence-languages` | `("math")` | Fenced-code languages rendered as display math. Add `"latex"`/`"tex"` if your agent emits display math under those tags; `nil` leaves every fence as code. |
 | `agent-shell-math-renderer-render-inline` | `t` | Recognize inline `\(…\)` math. |
-| `agent-shell-math-renderer-engine` | `latex` | Engine that typesets the equations: `latex` (`latex` + `dvisvgm`) or `ratex` (RaTeX's `render-svg`). See [Engine](#engine). Setting it updates the equations on its own. |
-| `agent-shell-math-renderer-fallback` | `t` | Typeset with LaTeX an equation the engine rejects, when the engine is not `latex`. See [Falling back to LaTeX](#falling-back-to-latex). |
+| `agent-shell-math-renderer-engine` | `latex` | Engine that typesets the equations: `latex` (`latex` + `dvisvgm`), `ratex` (RaTeX's `render-svg`) or `texres` (the `pdflatex` of texres + `pdftocairo`). See [Engine](#engine). Setting it updates the equations on its own. |
+| `agent-shell-math-renderer-fallback` | `t` | Typeset with LaTeX an equation the engine rejects, when the engine is `ratex`. See [Falling back to LaTeX](#falling-back-to-latex). |
 | `agent-shell-math-renderer-quiet` | `nil` | Drop the backend's warning about an equation it cannot typeset. Configuration problems still warn. See [Quiet failures](#quiet-failures). |
 | `agent-shell-math-renderer-rescale-inline` | `1.0` | Size multiplier for inline `\(…\)` math, on top of the backend's `latex-to-svg-backend-font-scale`. Re-scales from cache; setting it updates the equations on its own. |
 | `agent-shell-math-renderer-rescale-display` | `1.0` | Size multiplier for display math (`\[…\]`, `$$…$$`, fenced), on top of `latex-to-svg-backend-font-scale`. Re-scales from cache; setting it updates the equations on its own. |
@@ -424,7 +433,7 @@ placeholder / non-graphic behaviour) live in the
 | `latex-to-svg-backend-preamble` | standalone + amsmath/amssymb/xcolor | The base LaTeX preamble. |
 | `latex-to-svg-backend-latex-program` | `"latex"` | Program compiling LaTeX → DVI. |
 | `latex-to-svg-backend-dvisvgm-program` | `"dvisvgm"` | Program converting DVI → SVG. |
-| `latex-to-svg-backend-use-placeholder` | `nil` | Draw the placeholder panel instead of typesetting (also the automatic fallback when the toolchain is missing). |
+| `latex-to-svg-backend-use-placeholder` | `nil` | Draw the placeholder panel instead of typesetting. |
 | `latex-to-svg-backend-render-on-non-graphic` | `nil` | Compile images even on a non-graphical frame (for daemon setups viewed later in a GUI). |
 | `latex-to-svg-backend-cache-directory` | `nil` | Where SVGs are cached; `nil` uses `$XDG_CACHE_HOME/latex-to-svg-backend/`. |
 
