@@ -986,10 +986,12 @@ tooltip can name the engine only once the image exists (see
 
 (defun agent-shell-math-renderer--x-height-ratio (name frame)
   "Return the x-height of the font NAME on FRAME as a fraction of its size.
-That is the ascent of its lowercase x divided by its pixel size, read
-with the font opened at 1000 pixels, since `font-get-glyphs' gives
-whole pixels.  Emacs keeps a font it has opened, so a repeat costs a
-microsecond.  Nil when no font matches NAME or it has no x glyph."
+That is the ascent of its glyph for `x' divided by its pixel size,
+read with the font opened at 1000 pixels: `font-get-glyphs' gives
+whole pixels, which at a text size of 18 pixels is off by up to 5%.
+Emacs keeps a font it has opened, so a repeat costs about a
+microsecond.  Nil when FRAME finds no font NAME, or the font has no
+glyph for `x', as a symbol font has none."
   (when-let* ((entity (find-font (font-spec :name name) frame))
               (font (open-font entity 1000 frame))
               (glyph (aref (font-get-glyphs font 0 1 "x") 0)))
@@ -997,24 +999,23 @@ microsecond.  Nil when no font matches NAME or it has no x glyph."
 
 (defun agent-shell-math-renderer--x-height (&optional buffer)
   "Return the x-height of BUFFER's default font in a graphical frame, or nil.
-That is the height in pixels of the lowercase x of the font of the
-`default' face: its pixel size, slot 2 of `font-info' of `face-font',
-times its x-height ratio (`agent-shell-math-renderer--x-height-ratio').
+That is the height of the lowercase `x' of the font of the `default'
+face, in pixels: its pixel size, slot 2 of `font-info' of `face-font',
+times its ratio (`agent-shell-math-renderer--x-height-ratio').
 `face-font' follows the buffer's face remapping, so `text-scale-mode'
 applies.
 
 Measured against the frame that actually displays BUFFER, so the size
 is right even when the selected frame is a TTY/daemon frame (an async
-compile callback firing while a terminal frame is current), and
-without searching or touching unrelated frames.  Uses
+compile callback firing while a terminal frame is current).  Uses
 `with-selected-frame' (a temporary, non-raising, non-focus-stealing
-selection), so it never makes a parked child frame appear.  Returns nil
-when BUFFER is shown in no graphical window, in which case the backend
-compiles the equation but sizes nothing, and the display hook draws it
-once a graphical window shows BUFFER.
+selection), so it never makes a parked child frame appear.  Returns
+nil when BUFFER is shown in no graphical window, in which case the
+backend compiles the equation but sizes nothing, and the display hook
+draws it once a graphical window shows BUFFER.
 
-A font the frame cannot open, or one with no x glyph, yields nil as
-well, but is reported once per buffer rather than passed over."
+A font the frame cannot open, or one with no glyph for `x', yields nil
+as well, but is reported once per buffer rather than passed over."
   (let ((buffer (or buffer (current-buffer))))
     (when-let* ((frame (agent-shell-math-renderer--display-frame buffer)))
       (with-selected-frame frame
@@ -1036,14 +1037,14 @@ well, but is reported once per buffer rather than passed over."
 
 (defun agent-shell-math-renderer--x-height-at (pos &optional buffer)
   "Return the x-height of the font of the text at POS in BUFFER, or nil.
-That is the height in pixels of the lowercase x of the font Emacs uses
-at POS, the opening delimiter of an equation, in a window showing
-BUFFER (see `agent-shell-math-renderer--display-window'): its pixel
-size, slot 2 of `query-font', times its x-height ratio
+That is the height of the lowercase `x' of the font Emacs uses at POS,
+the opening delimiter of an equation, in a window showing BUFFER (see
+`agent-shell-math-renderer--display-window'), in pixels: its pixel
+size, slot 2 of `query-font', times its ratio
 \(`agent-shell-math-renderer--x-height-ratio').  The faces at POS and
 their `:height' apply, and so does `text-scale-mode'; so would a
 `:height' on the face `agent-shell-math-renderer', which sets none.
-When no font is found at POS, or it has no x glyph, it is
+When no font is found at POS, or it has no glyph for `x', it is
 `agent-shell-math-renderer--x-height', which is nil when BUFFER is
 shown in no graphical window.  It mirrors the latex-to-svg front-end's
 function of the same name."
