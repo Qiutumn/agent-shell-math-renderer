@@ -1083,11 +1083,9 @@ graphical frame is needed."
           (should (= 20 (plist-get (cdar calls) :font-height))))))))
 
 (ert-deftest agent-shell-math-renderer-no-render-without-graphical-frame ()
-  ;; With no graphical frame and the option nil, the backend is not called
-  ;; and the signature is cleared, so the display hook renders the buffer
-  ;; once a graphical window shows it, even with the appearance it was
-  ;; rendered for before.  With the option non-nil, the backend is called,
-  ;; with no color and no height.
+  ;; With no graphical frame the backend is not called and the signature is
+  ;; cleared, so the display hook renders the buffer once a graphical window
+  ;; shows it, even with the appearance it was rendered for before.
   (agent-shell-math-renderer-tests--with-backend-calls calls
     (cl-letf (((symbol-function 'agent-shell-math-renderer--graphical-p)
                #'ignore)
@@ -1104,19 +1102,30 @@ graphical frame is needed."
         (should-not calls)
         (should-not agent-shell-math-renderer--rendered-appearance)
         (let ((refreshed nil))
-          (cl-letf (((symbol-function 'agent-shell-math-renderer--appearance)
+          (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
+                     (lambda (&rest _) (selected-frame)))
+                    ((symbol-function 'agent-shell-math-renderer--appearance)
                      (lambda (&rest _) '("#111111" "#eeeeee" 20)))
                     ((symbol-function 'agent-shell-math-renderer-refresh)
                      (lambda (&rest _) (setq refreshed t))))
             (agent-shell-math-renderer--refresh-if-changed))
-          (should refreshed))
-        (let ((agent-shell-math-renderer-render-on-non-graphic t))
-          (agent-shell-math-renderer--render
-           (current-buffer) (point-min) (point-max) "x"))
-        (should (= 2 (length calls)))
-        (dolist (call calls)
-          (should-not (plist-get (cdr call) :color))
-          (should-not (plist-get (cdr call) :font-height)))))))
+          (should refreshed))))))
+
+(ert-deftest agent-shell-math-renderer-refresh-needs-a-graphical-window ()
+  ;; While no graphical window shows the buffer nothing can be drawn, so the
+  ;; refresh does not walk its equations, though the signature differs.
+  (with-temp-buffer
+    (setq agent-shell-math-renderer--present t
+          agent-shell-math-renderer--rendered-appearance nil)
+    (let ((refreshed nil))
+      (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
+                 #'ignore)
+                ((symbol-function 'agent-shell-math-renderer--font-height)
+                 #'ignore)
+                ((symbol-function 'agent-shell-math-renderer-refresh)
+                 (lambda (&rest _) (setq refreshed t))))
+        (agent-shell-math-renderer--refresh-if-changed))
+      (should-not refreshed))))
 
 (ert-deftest agent-shell-math-renderer-buried-buffer-renders-in-graphical-session ()
   ;; A buffer no window shows, while some frame is graphical, is compiled
@@ -1156,15 +1165,6 @@ graphical frame is needed."
         (agent-shell-math-renderer--render
          (current-buffer) (point-min) (point-max) "x")
         (should (= 2 (length calls)))))))
-
-(ert-deftest agent-shell-math-renderer-render-on-non-graphic-option ()
-  ;; Off by default, inert data, and watched.
-  (should-not (default-value 'agent-shell-math-renderer-render-on-non-graphic))
-  (should (funcall (get 'agent-shell-math-renderer-render-on-non-graphic
-                        'safe-local-variable)
-                   t))
-  (should (memq 'agent-shell-math-renderer-render-on-non-graphic
-                agent-shell-math-renderer--watched-options)))
 
 (ert-deftest agent-shell-math-renderer-unresolved-option-color-warns-once ()
   ;; A name the frame cannot resolve is reported once and ignored: the

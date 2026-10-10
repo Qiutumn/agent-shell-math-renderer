@@ -7,14 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- `agent-shell-math-renderer-render-on-non-graphic`, which takes over from
-  the backend's `latex-to-svg-backend-render-on-non-graphic`: when non-nil,
-  equations are compiled even when no frame is graphical, so an Emacs
-  daemon with only terminal clients has the images in the cache when a
-  graphical window shows the buffer.
-
 ### Changed
 
 - In an Emacs that cannot display SVG images (built without librsvg), the
@@ -36,15 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `default` face on the frame that shows the buffer, where it compared
   those of the selected frame.
 - An equation is compiled while some frame is graphical, whether or not a
-  window shows its buffer, or when
-  `agent-shell-math-renderer-render-on-non-graphic` is set. While every
-  frame is a terminal frame, the equations are compiled when a graphical
-  window shows the buffer. Before, the backend compiled them only while the
+  window shows its buffer. While every frame is a terminal frame, nothing
+  is compiled, and the equations are compiled when a graphical window
+  shows the buffer. Before, the backend compiled them only while the
   selected frame was graphical, unless
   `latex-to-svg-backend-render-on-non-graphic` was set, so a buffer
   rendered while a terminal client's frame was selected waited for its
-  next display even in a session with a graphical frame; 0.14.0 makes that
-  option obsolete and without effect.
+  next display even in a session with a graphical frame. 0.14.0 makes that
+  option obsolete and without effect, and this package has no replacement
+  for it.
+- The check for a theme or font change does nothing while no graphical
+  window shows the buffer.
 
 ## [0.13.0] - 2026-10-09
 

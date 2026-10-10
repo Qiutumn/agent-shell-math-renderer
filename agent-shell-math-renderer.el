@@ -469,30 +469,6 @@ submitted.  Rendering is deferred out of the submit command."
   :safe #'booleanp
   :group 'agent-shell-math-renderer)
 
-(defcustom agent-shell-math-renderer-render-on-non-graphic nil
-  "When non-nil, render equations even when no graphical frame exists.
-
-By default an equation is compiled only while some frame is graphical
-\(see `agent-shell-math-renderer--graphical-p'), whether or not a
-window shows its buffer: a buffer buried in a graphical session has its
-images in the cache when it is shown.  While every frame is a terminal
-frame, as in an Emacs daemon with only terminal clients, nothing is
-compiled, and the equations are compiled when a graphical window first
-shows the buffer, appearing when each compile ends.
-
-Set non-nil, typically in an Emacs daemon whose buffers are later
-viewed in a graphical frame, to compile them ahead: the raw LaTeX shows
-on a terminal, and the images are drawn from the cache as soon as a
-graphical window shows the buffer.  The trade-off is that a purely
-terminal session then runs LaTeX compiles whose images it never
-displays.
-
-Setting it with `setq', `setq-local' or Customize updates the
-equations on its own."
-  :type 'boolean
-  :safe #'booleanp
-  :group 'agent-shell-math-renderer)
-
 (defvar-local agent-shell-math-renderer--rendered-appearance nil
   "The appearance signature this buffer's equations were rendered for.
 A list (FOREGROUND BACKGROUND FONT-HEIGHT) — see
@@ -1099,8 +1075,7 @@ async compile finishes (so the overlay lands even after more output
 streams in).  When this Emacs cannot display SVG images (see
 `latex-to-svg-backend-available-p'), the backend warns once per
 session and returns no image, and the raw faced text stays.  When no
-frame is graphical (`agent-shell-math-renderer--graphical-p') and
-`agent-shell-math-renderer-render-on-non-graphic' is nil, it does
+frame is graphical (`agent-shell-math-renderer--graphical-p'), it does
 nothing and clears the appearance signature, so the display hook
 renders the equation once a graphical window shows BUFFER.
 
@@ -1135,8 +1110,7 @@ async compile reads all three again, on the frame that shows BUFFER
 then."
   (let ((frame (agent-shell-math-renderer--display-frame buffer)))
     (cond
-     ((not (or (agent-shell-math-renderer--graphical-p)
-               agent-shell-math-renderer-render-on-non-graphic))
+     ((not (agent-shell-math-renderer--graphical-p))
       ;; Clear the signature, so the display hook renders the buffer when a
       ;; graphical window shows it, even when the buffer was rendered there
       ;; before and nothing else changed.
@@ -1287,7 +1261,6 @@ fast and untouched buffers refresh lazily when next displayed."
     agent-shell-math-renderer-rescale-inline
     agent-shell-math-renderer-rescale-display
     agent-shell-math-renderer-center-display-math
-    agent-shell-math-renderer-render-on-non-graphic
     latex-to-svg-backend-preamble
     latex-to-svg-backend-appended-preamble
     latex-to-svg-backend-preamble-not-precompiled
@@ -1374,8 +1347,11 @@ relevant (displayed, themed, or zoomed) — so making one chat visible
 never re-renders the others; each refreshes lazily when it is itself
 displayed.  The appearance signature folds in both colors and the
 buffer font height (see `agent-shell-math-renderer--appearance'), so a
-font-size change is picked up just like a color change."
+font-size change is picked up just like a color change.  Nothing happens
+while no graphical window shows the buffer, since nothing can be drawn
+there: the check runs again when one does."
   (when (and agent-shell-math-renderer--present
+             (agent-shell-math-renderer--display-frame (current-buffer))
              (not (equal (agent-shell-math-renderer--appearance)
                          agent-shell-math-renderer--rendered-appearance)))
     (agent-shell-math-renderer-refresh (current-buffer))))
