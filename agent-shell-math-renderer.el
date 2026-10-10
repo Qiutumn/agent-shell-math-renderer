@@ -1151,7 +1151,7 @@ then."
              (quiet agent-shell-math-renderer-quiet)
              (rescale (if inline
                           agent-shell-math-renderer-rescale-inline
-			agent-shell-math-renderer-rescale-display))
+                        agent-shell-math-renderer-rescale-display))
              (color (agent-shell-math-renderer--foreground-for frame))
              (background (agent-shell-math-renderer--background-for frame))
              (padding (agent-shell-math-renderer--padding-for inline))
@@ -1160,19 +1160,19 @@ then."
                                           :color color :background background
                                           :padding padding
                                           :font-height font-height)))
-	;; Record the appearance (colors + font height) this render is for,
-	;; so a later theme / frame / font change can detect the difference
-	;; and re-render (a color change re-tints; it no longer recompiles).
-	(setq agent-shell-math-renderer--rendered-appearance
+        ;; Record the appearance (colors + font height) this render is for,
+        ;; so a later theme / frame / font change can detect the difference
+        ;; and re-render (a color change re-tints; it no longer recompiles).
+        (setq agent-shell-math-renderer--rendered-appearance
               (agent-shell-math-renderer--appearance buffer))
-	(if image
+        (if image
             (agent-shell-math-renderer--overlay-image
              buffer start end image inline
              (agent-shell-math-renderer--help-echo doc latex engine fallback))
           ;; Not ready yet: schedule and overlay when the SVG lands.  Capture
           ;; the region as markers so it survives further streaming output.
           (let ((s (copy-marker start))
-		(e (copy-marker end)))
+                (e (copy-marker end)))
             (latex-to-svg-backend
              doc
              :engine engine :fallback fallback :quiet quiet
@@ -1181,12 +1181,12 @@ then."
              :callback
              (lambda ()
                (when (buffer-live-p buffer)
-		 (with-current-buffer buffer
+                 (with-current-buffer buffer
                    ;; Read again: the buffer may be displayed now even if it
                    ;; was not when the compile was scheduled, or on another
                    ;; frame.
                    (let ((frame (agent-shell-math-renderer--display-frame
-				 buffer)))
+                                 buffer)))
                      (agent-shell-math-renderer--overlay-image
                       buffer s e
                       (latex-to-svg-backend
