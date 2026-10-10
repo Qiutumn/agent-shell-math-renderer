@@ -1146,19 +1146,16 @@ graphical frame is needed."
             ((symbol-function 'display-graphic-p) #'ignore))
     (should-not (agent-shell-math-renderer--graphical-p))))
 
-(ert-deftest agent-shell-math-renderer-no-svg-keeps-the-signature ()
-  ;; Without SVG support nothing can render, so the signature is left alone:
-  ;; clearing it would make every display walk the buffer for nothing.
+(ert-deftest agent-shell-math-renderer-no-svg-still-calls-the-backend ()
+  ;; Without SVG support the backend is still asked, so it can warn that this
+  ;; Emacs cannot display SVG images; it returns no image.
   (agent-shell-math-renderer-tests--with-backend-calls calls
     (cl-letf (((symbol-function 'latex-to-svg-backend-available-p) #'ignore))
       (with-temp-buffer
         (insert "xx")
-        (setq agent-shell-math-renderer--rendered-appearance '("#111111" "#eeeeee" 20))
         (agent-shell-math-renderer--render
          (current-buffer) (point-min) (point-max) "x")
-        (should-not calls)
-        (should (equal '("#111111" "#eeeeee" 20)
-                       agent-shell-math-renderer--rendered-appearance))))))
+        (should (= 2 (length calls)))))))
 
 (ert-deftest agent-shell-math-renderer-render-on-non-graphic-option ()
   ;; Off by default, inert data, and watched.

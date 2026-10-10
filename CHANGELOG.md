@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- In an Emacs that cannot display SVG images (built without librsvg), the
+  equations are still sent to the backend, which warns once per session
+  and returns no image; the LaTeX source stays. Before, this package sent
+  nothing and nothing said why the equations stayed as source.
 - Requires `latex-to-svg-backend` 0.14.0, which reads no faces and no
   frames. This package reads the colors on the frame that shows the buffer
   and passes them to the backend as `#rrggbb` strings: the tint, when

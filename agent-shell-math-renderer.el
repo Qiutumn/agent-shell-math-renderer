@@ -1096,13 +1096,13 @@ Delegates typesetting to `latex-to-svg-backend': overlays the image
 immediately when available (cached SVG), else
 captures START / END as markers and overlays the result once the
 async compile finishes (so the overlay lands even after more output
-streams in).  Does nothing, and leaves the raw faced text, when
-this Emacs cannot display SVG images (see
-`latex-to-svg-backend-available-p').  It does the same when no frame
-is graphical (`agent-shell-math-renderer--graphical-p') and
-`agent-shell-math-renderer-render-on-non-graphic' is nil, and then
-clears the appearance signature, so the display hook renders the
-equation once a graphical window shows BUFFER.
+streams in).  When this Emacs cannot display SVG images (see
+`latex-to-svg-backend-available-p'), the backend warns once per
+session and returns no image, and the raw faced text stays.  When no
+frame is graphical (`agent-shell-math-renderer--graphical-p') and
+`agent-shell-math-renderer-render-on-non-graphic' is nil, it does
+nothing and clears the appearance signature, so the display hook
+renders the equation once a graphical window shows BUFFER.
 
 LATEX is the equation body with delimiters stripped; INLINE non-nil
 typesets it in text style, otherwise display style.  Since
@@ -1135,7 +1135,6 @@ async compile reads all three again, on the frame that shows BUFFER
 then."
   (let ((frame (agent-shell-math-renderer--display-frame buffer)))
     (cond
-     ((not (latex-to-svg-backend-available-p)))
      ((not (or (agent-shell-math-renderer--graphical-p)
                agent-shell-math-renderer-render-on-non-graphic))
       ;; Clear the signature, so the display hook renders the buffer when a
