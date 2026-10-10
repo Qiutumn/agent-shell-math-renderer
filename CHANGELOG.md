@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-10
+
 ### Added
 
+- A third engine, `texres`: `agent-shell-math-renderer-engine` sends an
+  equation to the backend with `:engine 'texres`, which compiles it with the
+  `pdflatex` of [texres](https://github.com/leoliu0/texres) and converts the
+  PDF with `pdftocairo`. `C-u M-x agent-shell-math-renderer-refresh` deletes
+  texres's `.fmt` file too. An equation texres rejects has a LaTeX error, so
+  it gets no fallback.
 - Each equation takes the color and the x-height of the text at its
   opening delimiter: one in a heading, a link or a block quote has the
   color and the size of that text. The color is read again at every
@@ -67,6 +75,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for it.
 - The check for a theme or font change does nothing while no graphical
   window shows the buffer.
+- When a program of the engine is not found, the backend warns once per
+  session, naming the engine and the program, and the equation's source stays
+  as text. Before, the backend drew its placeholder panel. The commentary and
+  README now say so.
 
 ### Fixed
 
@@ -74,26 +86,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   yet in the cache: the heading's and the link's passes delete and
   reinsert their text, which collapsed the region the compile's callback
   held. Equations are now rendered after those passes.
-
-## [0.13.0] - 2026-10-09
-
-### Added
-
-- A third engine, `texres`: `agent-shell-math-renderer-engine` sends an
-  equation to the backend with `:engine 'texres`, which compiles it with the
-  `pdflatex` of [texres](https://github.com/leoliu0/texres) and converts the
-  PDF with `pdftocairo`. `C-u M-x agent-shell-math-renderer-refresh` deletes
-  texres's `.fmt` file too. An equation texres rejects has a LaTeX error, so
-  it gets no fallback.
-
-### Changed
-
-- Requires `latex-to-svg-backend` 0.12.1, which adds the texres engine and
-  reports a missing program the same way for every engine.
-- When a program of the engine is not found, the backend warns once per
-  session, naming the engine and the program, and the equation's source stays
-  as text. Before, the backend drew its placeholder panel. The commentary and
-  README now say so.
 
 ## [0.12.0] - 2026-09-28
 
