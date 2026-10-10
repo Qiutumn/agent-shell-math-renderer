@@ -18,6 +18,8 @@
 
 (require 'cl-lib)
 (require 'ert)
+;; Defines `text-scale-mode-hook', which a test reads.
+(require 'face-remap)
 ;; `display-warning' is autoloaded, and `cl-letf' resolving that autoload loads
 ;; warnings.el, which redefines it -- clobbering a stub installed in the same
 ;; `cl-letf'.  Load it up front so stubbing it is deterministic.
@@ -840,6 +842,25 @@ after text.
           (should (equal agent-shell-math-renderer--option-buffers
                          (list (current-buffer)))))))))
 
+(defmacro agent-shell-math-renderer-tests--with-backend-calls (var &rest body)
+  "Evaluate BODY with `latex-to-svg-backend' stubbed, recording into VAR.
+Each call pushes (LATEX . KEYS) onto VAR and returns nil, so every
+render takes the async path.  Nothing is overlaid, and the font height
+is fixed, so no graphical frame is needed."
+  (declare (indent 1) (debug t))
+  `(let ((,var '()))
+     (cl-letf (((symbol-function 'latex-to-svg-backend-available-p) #'always)
+               ((symbol-function 'agent-shell-math-renderer--font-height)
+                (lambda (&rest _) 20))
+               ((symbol-function 'latex-to-svg-backend-appearance) #'ignore)
+               ((symbol-function 'agent-shell-math-renderer--overlay-image)
+                #'ignore)
+               ((symbol-function 'latex-to-svg-backend)
+                (lambda (latex &rest keys)
+                  (push (cons latex keys) ,var)
+                  nil)))
+       ,@body)))
+
 (ert-deftest agent-shell-math-renderer-padding-by-kind ()
   ;; Inline and display math take their own padding, on the first render and
   ;; on a refresh.  A kind whose option is nil takes the obsolete
@@ -897,25 +918,6 @@ after text.
         (should (funcall safe ok)))
       (dolist (bad (list "3" '(1 2 3 4 5) '(1 "2") 'x))
         (should-not (funcall safe bad))))))
-
-(defmacro agent-shell-math-renderer-tests--with-backend-calls (var &rest body)
-  "Evaluate BODY with `latex-to-svg-backend' stubbed, recording into VAR.
-Each call pushes (LATEX . KEYS) onto VAR and returns nil, so every
-render takes the async path.  Nothing is overlaid, and the font height
-is fixed, so no graphical frame is needed."
-  (declare (indent 1) (debug t))
-  `(let ((,var '()))
-     (cl-letf (((symbol-function 'latex-to-svg-backend-available-p) #'always)
-               ((symbol-function 'agent-shell-math-renderer--font-height)
-                (lambda (&rest _) 20))
-               ((symbol-function 'latex-to-svg-backend-appearance) #'ignore)
-               ((symbol-function 'agent-shell-math-renderer--overlay-image)
-                #'ignore)
-               ((symbol-function 'latex-to-svg-backend)
-                (lambda (latex &rest keys)
-                  (push (cons latex keys) ,var)
-                  nil)))
-       ,@body)))
 
 (ert-deftest agent-shell-math-renderer-engine-passed-to-every-backend-call ()
   ;; The first request, the scheduled compile and the callback's re-query all

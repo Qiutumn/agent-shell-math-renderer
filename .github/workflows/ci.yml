@@ -69,12 +69,15 @@ jobs:
           done
           exit 1
 
+      # The test file is compiled too: a macro used before its definition
+      # compiles as a function call, which loading the source does not catch.
       - name: Byte-compile, warnings as errors
         run: |
           emacs -Q -batch \
             --eval '(progn (require (quote package)) (package-initialize))' \
             --eval '(setq byte-compile-error-on-warn t)' \
-            -L . -f batch-byte-compile agent-shell-math-renderer.el
+            -L . -f batch-byte-compile agent-shell-math-renderer.el \
+            tests/agent-shell-math-renderer-tests.el
 
       # Docstring conventions, exiting non-zero on any finding.  Both flags
       # are set rather than left at their defaults, so the step reports the
