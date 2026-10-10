@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Each equation takes the color and the font size of the text at its
+- Each equation takes the color and the x-height of the text at its
   opening delimiter: one in a heading, a link or a block quote has the
   color and the size of that text. The color is read again at every
   refresh, so a theme change re-tints them. Equations in plain text look
@@ -20,16 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `agent-shell-math-renderer-foreground-color` now colors the equations
   in text drawn in the default foreground; an equation in colored text
   keeps the color of the text. Before, it colored every equation.
-- Equations are sized by the em of the buffer font, the pixel size Emacs
-  opened the `default` face's font at, passed to the backend as
-  `:font-size`: a letter in an equation is as large as the same letter in
-  the text, as in a LaTeX document. Before, they were sized by the line
-  height (`default-font-height`), which is larger than the em, so
-  equations came out larger than the text. The size no longer differs
-  between Emacs ports, and inline equations sit on the text's baseline;
-  both come from `latex-to-svg-backend` 0.14.0. Every equation compiles
-  once more after the update, for the backend's new cache.
-
+- Equations are sized by the x-height of the text, the height of its
+  lowercase x, passed to the backend as `:x-height`: a lowercase letter in
+  an equation is as tall as one in the text, as CSS's `font-size-adjust`
+  does, whatever the font. Capitals and digits come out about 10% larger
+  than the text's. Before, they were sized by the line height
+  (`default-font-height`), so equations came out larger than the text.
+  The size no longer differs between Emacs ports, and inline equations sit
+  on the text's baseline; both come from `latex-to-svg-backend` 0.14.0.
+  Every equation compiles once more after the update, for the backend's
+  new cache.
 - In an Emacs that cannot display SVG images (built without librsvg), the
   equations are still sent to the backend, which warns once per session
   and returns no image; the LaTeX source stays. Before, this package sent

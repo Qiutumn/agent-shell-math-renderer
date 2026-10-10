@@ -710,29 +710,29 @@ after text.
                      "x"))
       (should-not (get-text-property 0 'agent-shell-math-renderer-inline display)))))
 
-(defmacro agent-shell-math-renderer-tests--with-appearance (font-size &rest body)
+(defmacro agent-shell-math-renderer-tests--with-appearance (x-height &rest body)
   "Evaluate BODY with the buffer shown on a graphical frame.
-The `default' face there is #000000 on #ffffff and the font size is
-FONT-SIZE, which is what `agent-shell-math-renderer--appearance'
+The `default' face there is #000000 on #ffffff and the x-height of its
+font is X-HEIGHT, which is what `agent-shell-math-renderer--appearance'
 reads."
   (declare (indent 1) (debug t))
   `(cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
               (lambda (&rest _) (selected-frame)))
              ((symbol-function 'face-foreground) (lambda (&rest _) "#000000"))
              ((symbol-function 'face-background) (lambda (&rest _) "#ffffff"))
-             ((symbol-function 'agent-shell-math-renderer--font-size)
-              (lambda (&rest _) ,font-size)))
+             ((symbol-function 'agent-shell-math-renderer--x-height)
+              (lambda (&rest _) ,x-height)))
      ,@body))
 
 (ert-deftest agent-shell-math-renderer-refresh-if-changed-detects-font ()
-  ;; `--refresh-if-changed' triggers a refresh when only the font size
+  ;; `--refresh-if-changed' triggers a refresh when only the x-height
   ;; moved (colors unchanged), and targets just the current buffer (the
   ;; one the hook made relevant) rather than every buffer.
   (let ((agent-shell-math-renderer-enabled t)
         (refreshed nil))
     (with-temp-buffer
       (setq agent-shell-math-renderer--present t)
-      ;; Buffer was last rendered at font size 20; same colors.
+      ;; Buffer was last rendered at x-height 20; same colors.
       (setq agent-shell-math-renderer--rendered-appearance
             '("#000000" "#ffffff" 20))
       (agent-shell-math-renderer-tests--with-appearance 30
@@ -749,33 +749,57 @@ reads."
           (agent-shell-math-renderer--refresh-if-changed)))
       (should-not refreshed))))
 
-(ert-deftest agent-shell-math-renderer-font-size-is-the-em ()
-  ;; The size is slot 2 of `font-info' of the `default' face's font, the
-  ;; pixel size the font was opened at, not its line height (slot 3).
+(ert-deftest agent-shell-math-renderer-x-height-is-size-times-ratio ()
+  ;; The x-height is the pixel size of the `default' face's font, slot 2 of
+  ;; `font-info', times the ratio of its x's ascent to its size, read with
+  ;; the font opened at 1000 pixels.
   (with-temp-buffer
     (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
                (lambda (&rest _) (selected-frame)))
               ((symbol-function 'face-font) (lambda (&rest _) "some-font"))
               ((symbol-function 'font-info)
                (lambda (name &rest _)
-                 (and (equal name "some-font") (vector name name 18 23)))))
-      (should (= 18 (agent-shell-math-renderer--font-size))))))
+                 (and (equal name "some-font") (vector name name 18 23))))
+              ((symbol-function 'find-font) (lambda (&rest _) 'entity))
+              ((symbol-function 'open-font)
+               (lambda (entity size &rest _)
+                 (should (eq entity 'entity))
+                 (should (= size 1000))
+                 'font-at-1000))
+              ((symbol-function 'font-get-glyphs)
+               (lambda (font &rest _)
+                 (should (eq font 'font-at-1000))
+                 ;; FROM TO C CODE LBEARING RBEARING WIDTH ASCENT DESCENT
+                 (vector (vector 0 0 ?x 91 40 560 600 550 0)))))
+      (should (= (* 18 0.55) (agent-shell-math-renderer--x-height))))))
 
-(ert-deftest agent-shell-math-renderer-font-size-reports-unmeasurable-font ()
-  ;; A font the frame cannot open leaves the size unknown, so the backend
-  ;; defers sizing -- but it is reported, once per buffer, never swallowed.
-  (let ((warnings 0))
-    (with-temp-buffer
-      (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
-                 (lambda (&rest _) (selected-frame)))
-                ((symbol-function 'face-font) (lambda (&rest _) "some-font"))
-                ((symbol-function 'font-info) #'ignore)
-                ((symbol-function 'display-warning)
-                 (lambda (&rest _) (cl-incf warnings))))
-        (should-not (agent-shell-math-renderer--font-size))
-        (should-not (agent-shell-math-renderer--font-size))
-        ;; One diagnosis for the buffer, not one per equation.
-        (should (= 1 warnings))))))
+(ert-deftest agent-shell-math-renderer-x-height-reports-unmeasurable-font ()
+  ;; A font the frame cannot open, or one with no x glyph, leaves the
+  ;; x-height unknown, so the backend defers sizing -- but it is reported,
+  ;; once per buffer, never swallowed.
+  (dolist (stubs (list (list (cons 'font-info #'ignore))
+                       (list (cons 'font-info
+                                   (lambda (name &rest _) (vector name name 18 23)))
+                             (cons 'agent-shell-math-renderer--x-height-ratio
+                                   #'ignore))))
+    (let ((warnings 0)
+          (originals (mapcar (lambda (stub) (cons (car stub)
+                                                  (symbol-function (car stub))))
+                             stubs)))
+      (unwind-protect
+          (progn
+            (dolist (stub stubs) (fset (car stub) (cdr stub)))
+            (with-temp-buffer
+              (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
+                         (lambda (&rest _) (selected-frame)))
+                        ((symbol-function 'face-font) (lambda (&rest _) "some-font"))
+                        ((symbol-function 'display-warning)
+                         (lambda (&rest _) (cl-incf warnings))))
+                (should-not (agent-shell-math-renderer--x-height))
+                (should-not (agent-shell-math-renderer--x-height))
+                ;; One diagnosis for the buffer, not one per equation.
+                (should (= 1 warnings)))))
+        (dolist (original originals) (fset (car original) (cdr original)))))))
 
 (ert-deftest agent-shell-math-renderer-refresh-if-changed-skips-non-present ()
   ;; In a buffer with no equations (`--present' nil), a hook firing is a
@@ -871,20 +895,22 @@ reads."
 (defun agent-shell-math-renderer-tests--check-colors (keys)
   "Signal an error unless KEYS meet `latex-to-svg-backend' 0.14.0.
 That is: `:color' and `:background' are nil or `#rrggbb' strings,
-`:font-size' is nil or a positive number, and `:color' is non-nil
-whenever `:font-size' is.  The removed `:font-height' is an error."
+`:x-height' is nil or a positive number, and `:color' is non-nil
+whenever `:x-height' is.  The removed `:font-size' and `:font-height'
+are errors."
   (let ((hex "\\`#[[:xdigit:]]\\{6\\}\\'"))
     (dolist (key '(:color :background))
       (let ((value (plist-get keys key)))
         (when (and value (not (and (stringp value) (string-match-p hex value))))
           (error "%s is not a #rrggbb string: %S" key value))))
-    (when (plist-member keys :font-height)
-      (error ":font-height is removed: pass :font-size"))
-    (let ((size (plist-get keys :font-size)))
-      (unless (or (null size) (and (numberp size) (> size 0)))
-        (error ":font-size is not a positive number: %S" size))
-      (when (and size (not (plist-get keys :color)))
-        (error ":color is nil with :font-size %S" size)))))
+    (dolist (key '(:font-size :font-height))
+      (when (plist-member keys key)
+        (error "%s is removed: pass :x-height" key)))
+    (let ((x-height (plist-get keys :x-height)))
+      (unless (or (null x-height) (and (numberp x-height) (> x-height 0)))
+        (error ":x-height is not a positive number: %S" x-height))
+      (when (and x-height (not (plist-get keys :color)))
+        (error ":color is nil with :x-height %S" x-height)))))
 
 (defmacro agent-shell-math-renderer-tests--with-backend-calls (var &rest body)
   "Evaluate BODY with `latex-to-svg-backend' stubbed, recording into VAR.
@@ -893,7 +919,7 @@ render takes the async path, and signals as the backend does when the
 colors break its contract (`agent-shell-math-renderer-tests--check-colors').
 Nothing is overlaid.  Some frame is graphical, and the buffer is shown
 on the selected frame, with
-a fixed font size and `default' foreground
+a fixed x-height and `default' foreground
 \(`agent-shell-math-renderer-tests--default-foreground'), so no
 graphical frame is needed."
   (declare (indent 1) (debug t))
@@ -904,7 +930,7 @@ graphical frame is needed."
                 #'always)
                ((symbol-function 'agent-shell-math-renderer--display-frame)
                 (lambda (&rest _) (selected-frame)))
-               ((symbol-function 'agent-shell-math-renderer--font-size)
+               ((symbol-function 'agent-shell-math-renderer--x-height)
                 (lambda (&rest _) 20))
                ((symbol-function 'face-foreground)
                 (lambda (face &rest args)
@@ -1082,7 +1108,7 @@ graphical frame is needed."
     (let ((shown nil))
       (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
                  (lambda (&rest _) (and shown (selected-frame))))
-                ((symbol-function 'agent-shell-math-renderer--font-size)
+                ((symbol-function 'agent-shell-math-renderer--x-height)
                  (lambda (&rest _) (and shown 20))))
         (with-temp-buffer
           (insert "xx")
@@ -1090,13 +1116,13 @@ graphical frame is needed."
            (current-buffer) (point-min) (point-max) "x")
           (dolist (call calls)
             (should-not (plist-get (cdr call) :color))
-            (should-not (plist-get (cdr call) :font-size)))
+            (should-not (plist-get (cdr call) :x-height)))
           (setq shown t)
           (funcall (plist-get (cdar calls) :callback))
           (should (= 3 (length calls)))
           (should (equal agent-shell-math-renderer-tests--default-foreground
                          (plist-get (cdar calls) :color)))
-          (should (= 20 (plist-get (cdar calls) :font-size))))))))
+          (should (= 20 (plist-get (cdar calls) :x-height))))))))
 
 (ert-deftest agent-shell-math-renderer-no-render-without-graphical-frame ()
   ;; With no graphical frame the backend is not called and the signature is
@@ -1107,7 +1133,7 @@ graphical frame is needed."
                #'ignore)
               ((symbol-function 'agent-shell-math-renderer--display-frame)
                #'ignore)
-              ((symbol-function 'agent-shell-math-renderer--font-size)
+              ((symbol-function 'agent-shell-math-renderer--x-height)
                #'ignore))
       (with-temp-buffer
         (insert "xx")
@@ -1136,7 +1162,7 @@ graphical frame is needed."
     (let ((refreshed nil))
       (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
                  #'ignore)
-                ((symbol-function 'agent-shell-math-renderer--font-size)
+                ((symbol-function 'agent-shell-math-renderer--x-height)
                  #'ignore)
                 ((symbol-function 'agent-shell-math-renderer-refresh)
                  (lambda (&rest _) (setq refreshed t))))
@@ -1150,7 +1176,7 @@ graphical frame is needed."
   (agent-shell-math-renderer-tests--with-backend-calls calls
     (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
                #'ignore)
-              ((symbol-function 'agent-shell-math-renderer--font-size)
+              ((symbol-function 'agent-shell-math-renderer--x-height)
                #'ignore))
       (with-temp-buffer
         (insert "xx")
@@ -1159,7 +1185,7 @@ graphical frame is needed."
         (should (= 2 (length calls)))
         (dolist (call calls)
           (should-not (plist-get (cdr call) :color))
-          (should-not (plist-get (cdr call) :font-size)))))))
+          (should-not (plist-get (cdr call) :x-height)))))))
 
 (ert-deftest agent-shell-math-renderer-graphical-p-reads-every-frame ()
   ;; Non-nil when any live frame is graphical, whichever is selected.
@@ -1221,16 +1247,16 @@ graphical frame is needed."
 
 (ert-deftest agent-shell-math-renderer-appearance-reads-the-display-frame ()
   ;; The signature is the `default' face's colors on the frame that shows the
-  ;; buffer, and the font size measured there; nil throughout when no
+  ;; buffer, and the x-height measured there; nil throughout when no
   ;; graphical window shows it.
   (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
              #'ignore)
-            ((symbol-function 'agent-shell-math-renderer--font-size)
+            ((symbol-function 'agent-shell-math-renderer--x-height)
              #'ignore))
     (should (equal '(nil nil nil) (agent-shell-math-renderer--appearance))))
   (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
              (lambda (&rest _) (selected-frame)))
-            ((symbol-function 'agent-shell-math-renderer--font-size)
+            ((symbol-function 'agent-shell-math-renderer--x-height)
              (lambda (&rest _) 20))
             ((symbol-function 'face-foreground) (lambda (&rest _) "#111111"))
             ((symbol-function 'face-background) (lambda (&rest _) "#eeeeee")))
@@ -1303,7 +1329,7 @@ A batch Emacs resolves a name to the nearest of its terminal's colors.")
   "Run BODY with every buffer shown on the selected frame, as if graphical.
 The `default' face is white on black there, `color-values' resolves the
 names in `agent-shell-math-renderer-tests--colors' and `#rrggbb'
-strings, and the buffer font has a pixel size of 18."
+strings, and the buffer font has an x-height of 18."
   (declare (indent 0) (debug t))
   `(let ((fg (face-attribute 'default :foreground))
          (bg (face-attribute 'default :background)))
@@ -1316,7 +1342,7 @@ strings, and the buffer font has a pixel size of 18."
                       (lambda (_buffer) (selected-window)))
                      ((symbol-function 'agent-shell-math-renderer--display-frame)
                       (lambda (_buffer) (selected-frame)))
-                     ((symbol-function 'agent-shell-math-renderer--font-size)
+                     ((symbol-function 'agent-shell-math-renderer--x-height)
                       (lambda (&rest _) 18))
                      ((symbol-function 'color-values)
                       (lambda (color &optional _frame)
@@ -1436,15 +1462,16 @@ strings, and the buffer font has a pixel size of 18."
                                           (match-beginning 0) 'display))))))))))
 
 (ert-deftest agent-shell-math-renderer-equation-sized-like-its-text ()
-  ;; An equation, inline or display, is sized by the font at its opening
-  ;; delimiter, its em (slot 2 of `query-font').  Batch has no graphical
-  ;; window, so the fonts are stubbed: text marked `test-big' gets a font
-  ;; of 27 pixels, other text one of 18.
+  ;; An equation, inline or display, is sized by the x-height of the font
+  ;; at its opening delimiter: its pixel size (slot 2 of `query-font')
+  ;; times its x-height ratio.  Batch has no graphical window, so the fonts
+  ;; are stubbed: text marked `test-big' gets a font of 27 pixels, other
+  ;; text one of 18, both with a ratio of 0.5.
   (agent-shell-math-renderer-tests--with-frame
     (let ((sizes nil))
       (cl-letf (((symbol-function 'latex-to-svg-backend)
                  (lambda (latex &rest args)
-                   (push (cons latex (plist-get args :font-size)) sizes)
+                   (push (cons latex (plist-get args :x-height)) sizes)
                    nil))
                 ((symbol-function 'font-at)
                  (lambda (pos &rest _)
@@ -1452,8 +1479,11 @@ strings, and the buffer font has a pixel size of 18."
                 ((symbol-function 'query-font)
                  (lambda (font)
                    (if (eq font 'big-font)
-                       [nil nil 27 nil 28 8 nil nil nil]
-                     [nil nil 18 nil 18 5 nil nil nil]))))
+                       ["big" nil 27 nil 28 8 nil nil nil]
+                     ["plain" nil 18 nil 18 5 nil nil nil])))
+                ((symbol-function 'agent-shell-math-renderer--x-height-ratio)
+                 (lambda (name &rest _)
+                   (and (member name '("big" "plain")) 0.5))))
         (with-temp-buffer
           (insert "\\(a\\) \\(b\\) \\[c\\]")
           (put-text-property 7 8 'test-big t)
@@ -1463,7 +1493,7 @@ strings, and the buffer font has a pixel size of 18."
           (agent-shell-math-renderer--render (current-buffer) 13 18 "c")
           (should (equal (sort (delete-dups sizes)
                                (lambda (x y) (string< (car x) (car y))))
-                         '(("$a$" . 18) ("$b$" . 27) ("\\[ c \\]" . 27)))))))))
+                         '(("$a$" . 9.0) ("$b$" . 13.5) ("\\[ c \\]" . 13.5)))))))))
 
 (ert-deftest agent-shell-math-renderer-help-echo-names-the-engine ()
   ;; Once the image is laid, the tooltip names the engine before the LaTeX,
@@ -1481,7 +1511,7 @@ strings, and the buffer font has a pixel size of 18."
                  #'always)
                 ((symbol-function 'agent-shell-math-renderer--display-frame)
                  (lambda (&rest _) (selected-frame)))
-                ((symbol-function 'agent-shell-math-renderer--font-size)
+                ((symbol-function 'agent-shell-math-renderer--x-height)
                  (lambda (&rest _) 20))
                 ((symbol-function 'agent-shell-math-renderer--foreground-for)
                  (lambda (&rest _) "#cbe3e7"))

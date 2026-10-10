@@ -22,15 +22,15 @@ round-trip renderable source.
 
 - **Crisp at any size** — equations are vector SVGs, not bitmaps: no pixelation,
   sharp on HiDPI/Retina displays and at every zoom level.
-- **Font-matched sizing** — equations render at the buffer's font size, so a
-  letter in an equation is as large as the same letter in the text, and an
-  inline equation sits on the text's baseline.
+- **Font-matched sizing** — equations render at the x-height of the text, so
+  a lowercase letter in an equation is as tall as one in the text, in any
+  font, and an inline equation sits on the text's baseline.
 - **Rescales with your font** — change the buffer or global font size, or zoom
   (`C-x C-+` / `C-x C--`), and every equation re-sizes to match.
 - **Theme-aware** — switch theme or toggle light/dark and the SVGs re-tint to
   the new foreground automatically, with no recompile.
 - **Follows its text** — an equation in a heading, a link or a block quote
-  takes the color and the font size of that text.
+  takes the color and the x-height of that text.
 - **Fast** — compilation is asynchronous (hidden behind the agent's streaming)
   and every equation is cached on disk, so repeats are instant.
 - **No special agent prompt** — works out of the box; the one thing worth
@@ -67,7 +67,7 @@ round-trip renderable source.
 Images are **theme-aware**: the SVG is compiled once, color-independent, and
 tinted at display time on the frame that shows the buffer, so a theme or
 light/dark switch re-tints with no recompile. Each equation takes the
-foreground and the font size of the text at its opening delimiter, so an
+foreground and the x-height of the text at its opening delimiter, so an
 inline equation in a heading has the heading's color and size.
 
 ## Requirements
@@ -78,7 +78,7 @@ inline equation in a heading has the heading's color and size.
   suppression the hook relies on)
 - **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.14.0
   or newer (the release that reads no faces and no frames: this package
-  passes the tint and the font size it reads on the frame that shows the
+  passes the tint and the x-height it reads on the frame that shows the
   buffer) — the backend (equation compile, caching, display-time tint/scale)
   is factored out into this standalone library. All typesetting knobs (LaTeX /
   dvisvgm / RaTeX / texres programs, preamble, cache directory, font scale)
@@ -496,10 +496,11 @@ Other options apply to equations rendered afterwards.
   time. Because the cache is content-addressed, it is shared with any other
   `latex-to-svg-backend` front-end (e.g. an Org previewer) — the same equation compiles
   once across all of them.
-- **Sizing** tracks the buffer font: the package measures the size the
-  `default` face's font was opened at, its em (slot 2 of `font-info`, which
-  follows `text-scale-mode`), against the buffer's *actual* display frame and
-  passes it to the backend, so the equation matches the surrounding text
+- **Sizing** tracks the buffer font: the package measures the x-height of the
+  font at each equation's opening delimiter (its pixel size, which follows
+  `text-scale-mode`, times the height of its lowercase x relative to that
+  size), against the buffer's *actual* display frame and passes it to the
+  backend, so the equation matches the surrounding text
   regardless of which frame is selected (e.g. an async compile finishing while a TTY/daemon frame is
   current). If the buffer is shown in no window when an equation is ready, the
   SVG is compiled and cached but not yet sized; it is drawn the moment the

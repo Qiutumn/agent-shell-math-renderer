@@ -474,7 +474,7 @@ submitted.  Rendering is deferred out of the submit command."
 
 (defvar-local agent-shell-math-renderer--rendered-appearance nil
   "The appearance signature this buffer's equations were rendered for.
-A list (FOREGROUND BACKGROUND FONT-SIZE) — see
+A list (FOREGROUND BACKGROUND X-HEIGHT) — see
 `agent-shell-math-renderer--appearance'.  Buffer-local:
 each buffer tracks its own last-rendered appearance, so a refresh
 can re-render just the affected buffer and leave the others to
@@ -984,11 +984,24 @@ tooltip can name the engine only once the image exists (see
 (defvar-local agent-shell-math-renderer--font-warned nil
   "Non-nil once an unmeasurable buffer font has been reported in this buffer.")
 
-(defun agent-shell-math-renderer--font-size (&optional buffer)
-  "Return the pixel size of BUFFER's default font in a graphical frame, or nil.
-That is the size Emacs opened the font of the `default' face at, its
-em: slot 2 of `font-info' of `face-font', which follows the buffer's
-face remapping, so `text-scale-mode' applies.
+(defun agent-shell-math-renderer--x-height-ratio (name frame)
+  "Return the x-height of the font NAME on FRAME as a fraction of its size.
+That is the ascent of its lowercase x divided by its pixel size, read
+with the font opened at 1000 pixels, since `font-get-glyphs' gives
+whole pixels.  Emacs keeps a font it has opened, so a repeat costs a
+microsecond.  Nil when no font matches NAME or it has no x glyph."
+  (when-let* ((entity (find-font (font-spec :name name) frame))
+              (font (open-font entity 1000 frame))
+              (glyph (aref (font-get-glyphs font 0 1 "x") 0)))
+    (/ (aref glyph 7) 1000.0)))
+
+(defun agent-shell-math-renderer--x-height (&optional buffer)
+  "Return the x-height of BUFFER's default font in a graphical frame, or nil.
+That is the height in pixels of the lowercase x of the font of the
+`default' face: its pixel size, slot 2 of `font-info' of `face-font',
+times its x-height ratio (`agent-shell-math-renderer--x-height-ratio').
+`face-font' follows the buffer's face remapping, so `text-scale-mode'
+applies.
 
 Measured against the frame that actually displays BUFFER, so the size
 is right even when the selected frame is a TTY/daemon frame (an async
@@ -1000,47 +1013,55 @@ when BUFFER is shown in no graphical window, in which case the backend
 compiles the equation but sizes nothing, and the display hook draws it
 once a graphical window shows BUFFER.
 
-A font the frame cannot open yields nil as well, but is reported once
-per buffer rather than passed over: `font-info' returns nil for it."
+A font the frame cannot open, or one with no x glyph, yields nil as
+well, but is reported once per buffer rather than passed over."
   (let ((buffer (or buffer (current-buffer))))
     (when-let* ((frame (agent-shell-math-renderer--display-frame buffer)))
       (with-selected-frame frame
         (with-current-buffer buffer
-          (let ((font (face-font 'default)))
-            (if-let* ((info (and font (font-info font))))
-                (aref info 2)
+          (let* ((font (face-font 'default))
+                 (info (and font (font-info font)))
+                 (ratio (and info (agent-shell-math-renderer--x-height-ratio
+                                   font frame))))
+            (if ratio
+                (* (aref info 2) ratio)
               (unless agent-shell-math-renderer--font-warned
                 (setq agent-shell-math-renderer--font-warned t)
                 (display-warning
                  'agent-shell-math-renderer
-                 (format "Cannot measure the buffer font: %S" font)
+                 (format "Cannot measure the x-height of the buffer font: %S"
+                         font)
                  :warning))
               nil)))))))
 
-(defun agent-shell-math-renderer--font-size-at (pos &optional buffer)
-  "Return the pixel size of the font of the text at POS in BUFFER, or nil.
-That is the pixel size of the font Emacs uses at POS, the opening
-delimiter of an equation, in a window showing BUFFER (see
-`agent-shell-math-renderer--display-window'): its em, slot 2 of
-`query-font'.  The faces at POS and their `:height' apply, and so does
-`text-scale-mode'; so would a `:height' on the face
-`agent-shell-math-renderer', which sets none.  When no font is found at
-POS, it is `agent-shell-math-renderer--font-size', which is nil when
-BUFFER is shown in no graphical window.  It mirrors the latex-to-svg
-front-end's function of the same name."
+(defun agent-shell-math-renderer--x-height-at (pos &optional buffer)
+  "Return the x-height of the font of the text at POS in BUFFER, or nil.
+That is the height in pixels of the lowercase x of the font Emacs uses
+at POS, the opening delimiter of an equation, in a window showing
+BUFFER (see `agent-shell-math-renderer--display-window'): its pixel
+size, slot 2 of `query-font', times its x-height ratio
+\(`agent-shell-math-renderer--x-height-ratio').  The faces at POS and
+their `:height' apply, and so does `text-scale-mode'; so would a
+`:height' on the face `agent-shell-math-renderer', which sets none.
+When no font is found at POS, or it has no x glyph, it is
+`agent-shell-math-renderer--x-height', which is nil when BUFFER is
+shown in no graphical window.  It mirrors the latex-to-svg front-end's
+function of the same name."
   (let ((buffer (or buffer (current-buffer))))
     (or (when-let* ((win (agent-shell-math-renderer--display-window buffer)))
           (with-selected-frame (window-frame win)
             (with-current-buffer buffer
               (when-let* ((font (ignore-errors (font-at pos win)))
-                          (info (query-font font)))
-                (aref info 2)))))
-        (agent-shell-math-renderer--font-size buffer))))
+                          (info (query-font font))
+                          (ratio (agent-shell-math-renderer--x-height-ratio
+                                  (aref info 0) (window-frame win))))
+                (* (aref info 2) ratio)))))
+        (agent-shell-math-renderer--x-height buffer))))
 
 (defun agent-shell-math-renderer--display-window (buffer)
   "Return a window showing BUFFER on a graphical frame, or nil.
 Equations are measured and tinted against its frame (see
-`agent-shell-math-renderer--font-size')."
+`agent-shell-math-renderer--x-height')."
   (when-let* ((win (get-buffer-window buffer t))
               ((display-graphic-p (window-frame win))))
     win))
@@ -1166,16 +1187,16 @@ FRAME.  Nil, a transparent box, when the option is nil or FRAME is nil."
 
 (defun agent-shell-math-renderer--appearance (&optional buffer)
   "Return the appearance signature of BUFFER's equations (default current).
-A list (FOREGROUND BACKGROUND FONT-SIZE): the foreground and the
+A list (FOREGROUND BACKGROUND X-HEIGHT): the foreground and the
 background of the `default' face on the frame that shows BUFFER (see
 `agent-shell-math-renderer--display-frame'), and
-`agent-shell-math-renderer--font-size'.  All three are nil when
+`agent-shell-math-renderer--x-height'.  All three are nil when
 BUFFER is shown in no graphical window."
   (let* ((buffer (or buffer (current-buffer)))
          (frame (agent-shell-math-renderer--display-frame buffer)))
     (list (and frame (face-foreground 'default frame t))
           (and frame (face-background 'default frame t))
-          (agent-shell-math-renderer--font-size buffer))))
+          (agent-shell-math-renderer--x-height buffer))))
 
 (defun agent-shell-math-renderer--wrap (latex &optional inline)
   "Return LATEX wrapped as the string sent to the backend.
@@ -1232,11 +1253,11 @@ to the buffer font at display time, the latter by
 are read on the frame that shows BUFFER
 \(`agent-shell-math-renderer--foreground-for' /
 `agent-shell-math-renderer--background-for', via `:color' /
-`:background'), and so is the size of the font, its em (via
-`:font-size'), so neither depends on which frame is selected.  The
-equation takes the color and the font size of the text at START, its
+`:background'), and so is the x-height of the font (via
+`:x-height'), so neither depends on which frame is selected.  The
+equation takes the color and the x-height of the text at START, its
 opening delimiter, so one in a heading or a link looks like that text
-\(`agent-shell-math-renderer--font-size-at').  The padding is
+\(`agent-shell-math-renderer--x-height-at').  The padding is
 `agent-shell-math-renderer--padding-for' (via `:padding').  When
 BUFFER is shown in no graphical window, all three are nil: the backend
 compiles the SVG and returns no image, and the display hook re-renders
@@ -1252,7 +1273,7 @@ then."
       (with-current-buffer buffer
         (setq agent-shell-math-renderer--rendered-appearance nil)))
      (t
-      (let* ((font-size (agent-shell-math-renderer--font-size-at start buffer))
+      (let* ((x-height (agent-shell-math-renderer--x-height-at start buffer))
              (doc (agent-shell-math-renderer--wrap latex inline))
              (engine agent-shell-math-renderer-engine)
              (fallback (agent-shell-math-renderer--fallback-for engine))
@@ -1267,8 +1288,8 @@ then."
                                           :quiet quiet :rescale-by rescale
                                           :color color :background background
                                           :padding padding
-                                          :font-size font-size)))
-        ;; Record the appearance (colors + font size) this render is for,
+                                          :x-height x-height)))
+        ;; Record the appearance (colors + x-height) this render is for,
         ;; so a later theme / frame / font change can detect the difference
         ;; and re-render (a color change re-tints; it no longer recompiles).
         (setq agent-shell-math-renderer--rendered-appearance
@@ -1285,7 +1306,7 @@ then."
              doc
              :engine engine :fallback fallback :quiet quiet
              :rescale-by rescale :color color
-             :background background :padding padding :font-size font-size
+             :background background :padding padding :x-height x-height
              :callback
              (lambda ()
                (when (buffer-live-p buffer)
@@ -1304,8 +1325,8 @@ then."
                        :background (agent-shell-math-renderer--background-for
                                     frame)
                        :padding padding
-                       :font-size (agent-shell-math-renderer--font-size-at
-                                   s buffer))
+                       :x-height (agent-shell-math-renderer--x-height-at
+                                  s buffer))
                       inline
                       (agent-shell-math-renderer--help-echo
                        doc latex engine fallback))))))))))))))
@@ -1481,7 +1502,7 @@ Acts only on the current buffer — the one the firing hook just made
 relevant (displayed, themed, or zoomed) — so making one chat visible
 never re-renders the others; each refreshes lazily when it is itself
 displayed.  The appearance signature folds in both colors and the
-size of the buffer font (see `agent-shell-math-renderer--appearance'),
+x-height of the buffer font (see `agent-shell-math-renderer--appearance'),
 so a font-size change is picked up just like a color change.  Nothing happens
 while no graphical window shows the buffer, since nothing can be drawn
 there: the check runs again when one does."
