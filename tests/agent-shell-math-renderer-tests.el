@@ -862,7 +862,8 @@ That is: `:color' and `:background' are nil or `#rrggbb' strings, and
 Each call pushes (LATEX . KEYS) onto VAR and returns nil, so every
 render takes the async path, and signals as the backend does when the
 colors break its contract (`agent-shell-math-renderer-tests--check-colors').
-Nothing is overlaid.  The buffer is shown on the selected frame, with
+Nothing is overlaid.  Some frame is graphical, and the buffer is shown
+on the selected frame, with
 a fixed font height and `default' foreground
 \(`agent-shell-math-renderer-tests--default-foreground'), so no
 graphical frame is needed."
@@ -870,6 +871,8 @@ graphical frame is needed."
   `(let ((,var '())
          (face-foreground (symbol-function 'face-foreground)))
      (cl-letf (((symbol-function 'latex-to-svg-backend-available-p) #'always)
+               ((symbol-function 'agent-shell-math-renderer--graphical-p)
+                #'always)
                ((symbol-function 'agent-shell-math-renderer--display-frame)
                 (lambda (&rest _) (selected-frame)))
                ((symbol-function 'agent-shell-math-renderer--font-height)
@@ -1042,10 +1045,10 @@ graphical frame is needed."
             (should (equal (nth 3 case) (plist-get (cdr call) :background)))))))))
 
 (ert-deftest agent-shell-math-renderer-callback-reads-colors-again ()
-  ;; A buffer shown nowhere when the compile is scheduled gets no color and
-  ;; no height; shown when the compile ends, the callback reads both on the
-  ;; frame that shows it then, so the backend never sees a height without a
-  ;; color.
+  ;; A buffer shown nowhere when the compile is scheduled, in a graphical
+  ;; session, is rendered with no color and no height; shown when the compile
+  ;; ends, the callback reads both on the frame that shows it then, so the
+  ;; backend never sees a height without a color.
   (agent-shell-math-renderer-tests--with-backend-calls calls
     (let ((shown nil))
       (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
@@ -1065,6 +1068,93 @@ graphical frame is needed."
           (should (equal agent-shell-math-renderer-tests--default-foreground
                          (plist-get (cdar calls) :color)))
           (should (= 20 (plist-get (cdar calls) :font-height))))))))
+
+(ert-deftest agent-shell-math-renderer-no-render-without-graphical-frame ()
+  ;; With no graphical frame and the option nil, the backend is not called
+  ;; and the signature is cleared, so the display hook renders the buffer
+  ;; once a graphical window shows it, even with the appearance it was
+  ;; rendered for before.  With the option non-nil, the backend is called,
+  ;; with no color and no height.
+  (agent-shell-math-renderer-tests--with-backend-calls calls
+    (cl-letf (((symbol-function 'agent-shell-math-renderer--graphical-p)
+               #'ignore)
+              ((symbol-function 'agent-shell-math-renderer--display-frame)
+               #'ignore)
+              ((symbol-function 'agent-shell-math-renderer--font-height)
+               #'ignore))
+      (with-temp-buffer
+        (insert "xx")
+        (setq agent-shell-math-renderer--present t
+              agent-shell-math-renderer--rendered-appearance '("#111111" "#eeeeee" 20))
+        (agent-shell-math-renderer--render
+         (current-buffer) (point-min) (point-max) "x")
+        (should-not calls)
+        (should-not agent-shell-math-renderer--rendered-appearance)
+        (let ((refreshed nil))
+          (cl-letf (((symbol-function 'agent-shell-math-renderer--appearance)
+                     (lambda (&rest _) '("#111111" "#eeeeee" 20)))
+                    ((symbol-function 'agent-shell-math-renderer-refresh)
+                     (lambda (&rest _) (setq refreshed t))))
+            (agent-shell-math-renderer--refresh-if-changed))
+          (should refreshed))
+        (let ((agent-shell-math-renderer-render-on-non-graphic t))
+          (agent-shell-math-renderer--render
+           (current-buffer) (point-min) (point-max) "x"))
+        (should (= 2 (length calls)))
+        (dolist (call calls)
+          (should-not (plist-get (cdr call) :color))
+          (should-not (plist-get (cdr call) :font-height)))))))
+
+(ert-deftest agent-shell-math-renderer-buried-buffer-renders-in-graphical-session ()
+  ;; A buffer no window shows, while some frame is graphical, is compiled
+  ;; ahead: the backend is called with no color and no height, and returns
+  ;; no image until the buffer is shown.
+  (agent-shell-math-renderer-tests--with-backend-calls calls
+    (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
+               #'ignore)
+              ((symbol-function 'agent-shell-math-renderer--font-height)
+               #'ignore))
+      (with-temp-buffer
+        (insert "xx")
+        (agent-shell-math-renderer--render
+         (current-buffer) (point-min) (point-max) "x")
+        (should (= 2 (length calls)))
+        (dolist (call calls)
+          (should-not (plist-get (cdr call) :color))
+          (should-not (plist-get (cdr call) :font-height)))))))
+
+(ert-deftest agent-shell-math-renderer-graphical-p-reads-every-frame ()
+  ;; Non-nil when any live frame is graphical, whichever is selected.
+  (cl-letf (((symbol-function 'frame-list) (lambda () '(tty gui)))
+            ((symbol-function 'display-graphic-p)
+             (lambda (&optional frame) (eq frame 'gui))))
+    (should (agent-shell-math-renderer--graphical-p)))
+  (cl-letf (((symbol-function 'frame-list) (lambda () '(tty other-tty)))
+            ((symbol-function 'display-graphic-p) #'ignore))
+    (should-not (agent-shell-math-renderer--graphical-p))))
+
+(ert-deftest agent-shell-math-renderer-no-svg-keeps-the-signature ()
+  ;; Without SVG support nothing can render, so the signature is left alone:
+  ;; clearing it would make every display walk the buffer for nothing.
+  (agent-shell-math-renderer-tests--with-backend-calls calls
+    (cl-letf (((symbol-function 'latex-to-svg-backend-available-p) #'ignore))
+      (with-temp-buffer
+        (insert "xx")
+        (setq agent-shell-math-renderer--rendered-appearance '("#111111" "#eeeeee" 20))
+        (agent-shell-math-renderer--render
+         (current-buffer) (point-min) (point-max) "x")
+        (should-not calls)
+        (should (equal '("#111111" "#eeeeee" 20)
+                       agent-shell-math-renderer--rendered-appearance))))))
+
+(ert-deftest agent-shell-math-renderer-render-on-non-graphic-option ()
+  ;; Off by default, inert data, and watched.
+  (should-not (default-value 'agent-shell-math-renderer-render-on-non-graphic))
+  (should (funcall (get 'agent-shell-math-renderer-render-on-non-graphic
+                        'safe-local-variable)
+                   t))
+  (should (memq 'agent-shell-math-renderer-render-on-non-graphic
+                agent-shell-math-renderer--watched-options)))
 
 (ert-deftest agent-shell-math-renderer-unresolved-option-color-warns-once ()
   ;; A name the frame cannot resolve is reported once and ignored: the
@@ -1133,8 +1223,14 @@ graphical frame is needed."
     (let ((agent-shell-math-renderer-engine (nth 0 case))
           (queried nil))
       (cl-letf (((symbol-function 'latex-to-svg-backend-available-p) #'always)
+                ((symbol-function 'agent-shell-math-renderer--graphical-p)
+                 #'always)
+                ((symbol-function 'agent-shell-math-renderer--display-frame)
+                 (lambda (&rest _) (selected-frame)))
                 ((symbol-function 'agent-shell-math-renderer--font-height)
                  (lambda (&rest _) 20))
+                ((symbol-function 'agent-shell-math-renderer--foreground-for)
+                 (lambda (&rest _) "#cbe3e7"))
                 ((symbol-function 'agent-shell-math-renderer--appearance)
                  #'ignore)
                 ((symbol-function 'latex-to-svg-backend)

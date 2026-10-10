@@ -408,6 +408,7 @@ group (`M-x customize-group RET agent-shell-math-renderer`):
 | `agent-shell-math-renderer-on-appearance-change` | — | Function to add to `enable-theme-functions` and `after-setting-font-hook` for instant re-tint / rescale on a theme or frame-font change (optional). |
 | `agent-shell-math-renderer-enabled` | `nil` | **Obsolete** compatibility switch (use the mode). Non-nil via Customize/`setopt` enables the mode in all agent-shell buffers. |
 | `agent-shell-math-renderer-render-submitted-prompts` | `nil` | Also render math in submitted user prompts when the mode is on. |
+| `agent-shell-math-renderer-render-on-non-graphic` | `nil` | Compile equations even when no frame is graphical, so an Emacs daemon with only terminal clients has the images in the cache when a graphical window shows the buffer. When `nil`, equations are compiled while some frame is graphical (a buried buffer included), and otherwise when a graphical window shows the buffer. Setting it updates the equations on its own. |
 | `agent-shell-math-renderer-delimiters` | `(bracket dollar)` | Which display delimiters to recognize: `bracket` (`\[…\]`) and/or `dollar` (`$$…$$`). |
 | `agent-shell-math-renderer-fence-languages` | `("math")` | Fenced-code languages rendered as display math. Add `"latex"`/`"tex"` if your agent emits display math under those tags; `nil` leaves every fence as code. |
 | `agent-shell-math-renderer-render-inline` | `t` | Recognize inline `\(…\)` math. |

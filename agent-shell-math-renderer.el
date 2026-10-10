@@ -469,6 +469,30 @@ submitted.  Rendering is deferred out of the submit command."
   :safe #'booleanp
   :group 'agent-shell-math-renderer)
 
+(defcustom agent-shell-math-renderer-render-on-non-graphic nil
+  "When non-nil, render equations even when no graphical frame exists.
+
+By default an equation is compiled only while some frame is graphical
+\(see `agent-shell-math-renderer--graphical-p'), whether or not a
+window shows its buffer: a buffer buried in a graphical session has its
+images in the cache when it is shown.  While every frame is a terminal
+frame, as in an Emacs daemon with only terminal clients, nothing is
+compiled, and the equations are compiled when a graphical window first
+shows the buffer, appearing when each compile ends.
+
+Set non-nil, typically in an Emacs daemon whose buffers are later
+viewed in a graphical frame, to compile them ahead: the raw LaTeX shows
+on a terminal, and the images are drawn from the cache as soon as a
+graphical window shows the buffer.  The trade-off is that a purely
+terminal session then runs LaTeX compiles whose images it never
+displays.
+
+Setting it with `setq', `setq-local' or Customize updates the
+equations on its own."
+  :type 'boolean
+  :safe #'booleanp
+  :group 'agent-shell-math-renderer)
+
 (defvar-local agent-shell-math-renderer--rendered-appearance nil
   "The appearance signature this buffer's equations were rendered for.
 A list (FOREGROUND BACKGROUND FONT-HEIGHT) — see
@@ -973,6 +997,14 @@ See `agent-shell-math-renderer--display-window'."
   (when-let* ((win (agent-shell-math-renderer--display-window buffer)))
     (window-frame win)))
 
+(defun agent-shell-math-renderer--graphical-p ()
+  "Return non-nil if some live frame is graphical.
+That is whether an equation image can be displayed in this session,
+now or once a window shows its buffer.  It reads no frame's font or
+colors, and selects none (see `agent-shell-math-renderer--display-frame'
+for the frame equations are measured and tinted against)."
+  (seq-some #'display-graphic-p (frame-list)))
+
 (defun agent-shell-math-renderer--hex-color (color frame)
   "Return COLOR as a `#rrggbb' string, resolved on FRAME, or nil.
 A `#rrggbb' string is returned as it is.  Other colors are read with
@@ -1064,8 +1096,13 @@ Delegates typesetting to `latex-to-svg-backend': overlays the image
 immediately when available (cached SVG), else
 captures START / END as markers and overlays the result once the
 async compile finishes (so the overlay lands even after more output
-streams in).  Does nothing when equations aren't renderable (see
-`latex-to-svg-backend-available-p') — the raw faced text stands in.
+streams in).  Does nothing, and leaves the raw faced text, when
+this Emacs cannot display SVG images (see
+`latex-to-svg-backend-available-p').  It does the same when no frame
+is graphical (`agent-shell-math-renderer--graphical-p') and
+`agent-shell-math-renderer-render-on-non-graphic' is nil, and then
+clears the appearance signature, so the display hook renders the
+equation once a graphical window shows BUFFER.
 
 LATEX is the equation body with delimiters stripped; INLINE non-nil
 typesets it in text style, otherwise display style.  Since
@@ -1091,69 +1128,79 @@ are read on the frame that shows BUFFER
 \(`agent-shell-math-renderer--font-height', via `:font-height'), so
 neither depends on which frame is selected.  The padding is
 `agent-shell-math-renderer--padding-for' (via `:padding').  When
-BUFFER is shown in no graphical window all three are nil: the backend
+BUFFER is shown in no graphical window, all three are nil: the backend
 compiles the SVG and returns no image, and the display hook re-renders
-once the buffer is shown.  The callback of an async compile reads all
-three again, on the frame that shows BUFFER then."
-  (when (latex-to-svg-backend-available-p)
-    (let* ((frame (agent-shell-math-renderer--display-frame buffer))
-           (font-height (agent-shell-math-renderer--font-height buffer))
-           (doc (agent-shell-math-renderer--wrap latex inline))
-           (engine agent-shell-math-renderer-engine)
-           (fallback (agent-shell-math-renderer--fallback-for engine))
-           (quiet agent-shell-math-renderer-quiet)
-           (rescale (if inline
-                        agent-shell-math-renderer-rescale-inline
-                      agent-shell-math-renderer-rescale-display))
-           (color (agent-shell-math-renderer--foreground-for frame))
-           (background (agent-shell-math-renderer--background-for frame))
-           (padding (agent-shell-math-renderer--padding-for inline))
-           (image (latex-to-svg-backend doc :engine engine :fallback fallback
-                                        :quiet quiet :rescale-by rescale
-                                        :color color :background background
-                                        :padding padding
-                                        :font-height font-height)))
-      ;; Record the appearance (colors + font height) this render is for,
-      ;; so a later theme / frame / font change can detect the difference
-      ;; and re-render (a color change re-tints; it no longer recompiles).
-      (setq agent-shell-math-renderer--rendered-appearance
-            (agent-shell-math-renderer--appearance buffer))
-      (if image
-          (agent-shell-math-renderer--overlay-image
-           buffer start end image inline
-           (agent-shell-math-renderer--help-echo doc latex engine fallback))
-        ;; Not ready yet: schedule and overlay when the SVG lands.  Capture
-        ;; the region as markers so it survives further streaming output.
-        (let ((s (copy-marker start))
-              (e (copy-marker end)))
-          (latex-to-svg-backend
-           doc
-           :engine engine :fallback fallback :quiet quiet
-           :rescale-by rescale :color color
-           :background background :padding padding :font-height font-height
-           :callback
-           (lambda ()
-             (when (buffer-live-p buffer)
-               (with-current-buffer buffer
-                 ;; Read again: the buffer may be displayed now even if it
-                 ;; was not when the compile was scheduled, or on another
-                 ;; frame.
-                 (let ((frame (agent-shell-math-renderer--display-frame
-                               buffer)))
-                   (agent-shell-math-renderer--overlay-image
-                    buffer s e
-                    (latex-to-svg-backend
-                     doc :engine engine :fallback fallback :quiet quiet
-                     :rescale-by rescale
-                     :color (agent-shell-math-renderer--foreground-for frame)
-                     :background (agent-shell-math-renderer--background-for
-                                  frame)
-                     :padding padding
-                     :font-height (agent-shell-math-renderer--font-height
-                                   buffer))
-                    inline
-                    (agent-shell-math-renderer--help-echo
-                     doc latex engine fallback))))))))))))
+once the buffer is shown, from the cache.  The callback of an
+async compile reads all three again, on the frame that shows BUFFER
+then."
+  (let ((frame (agent-shell-math-renderer--display-frame buffer)))
+    (cond
+     ((not (latex-to-svg-backend-available-p)))
+     ((not (or (agent-shell-math-renderer--graphical-p)
+               agent-shell-math-renderer-render-on-non-graphic))
+      ;; Clear the signature, so the display hook renders the buffer when a
+      ;; graphical window shows it, even when the buffer was rendered there
+      ;; before and nothing else changed.
+      (with-current-buffer buffer
+        (setq agent-shell-math-renderer--rendered-appearance nil)))
+     (t
+      (let* ((font-height (agent-shell-math-renderer--font-height buffer))
+             (doc (agent-shell-math-renderer--wrap latex inline))
+             (engine agent-shell-math-renderer-engine)
+             (fallback (agent-shell-math-renderer--fallback-for engine))
+             (quiet agent-shell-math-renderer-quiet)
+             (rescale (if inline
+                          agent-shell-math-renderer-rescale-inline
+			agent-shell-math-renderer-rescale-display))
+             (color (agent-shell-math-renderer--foreground-for frame))
+             (background (agent-shell-math-renderer--background-for frame))
+             (padding (agent-shell-math-renderer--padding-for inline))
+             (image (latex-to-svg-backend doc :engine engine :fallback fallback
+                                          :quiet quiet :rescale-by rescale
+                                          :color color :background background
+                                          :padding padding
+                                          :font-height font-height)))
+	;; Record the appearance (colors + font height) this render is for,
+	;; so a later theme / frame / font change can detect the difference
+	;; and re-render (a color change re-tints; it no longer recompiles).
+	(setq agent-shell-math-renderer--rendered-appearance
+              (agent-shell-math-renderer--appearance buffer))
+	(if image
+            (agent-shell-math-renderer--overlay-image
+             buffer start end image inline
+             (agent-shell-math-renderer--help-echo doc latex engine fallback))
+          ;; Not ready yet: schedule and overlay when the SVG lands.  Capture
+          ;; the region as markers so it survives further streaming output.
+          (let ((s (copy-marker start))
+		(e (copy-marker end)))
+            (latex-to-svg-backend
+             doc
+             :engine engine :fallback fallback :quiet quiet
+             :rescale-by rescale :color color
+             :background background :padding padding :font-height font-height
+             :callback
+             (lambda ()
+               (when (buffer-live-p buffer)
+		 (with-current-buffer buffer
+                   ;; Read again: the buffer may be displayed now even if it
+                   ;; was not when the compile was scheduled, or on another
+                   ;; frame.
+                   (let ((frame (agent-shell-math-renderer--display-frame
+				 buffer)))
+                     (agent-shell-math-renderer--overlay-image
+                      buffer s e
+                      (latex-to-svg-backend
+                       doc :engine engine :fallback fallback :quiet quiet
+                       :rescale-by rescale
+                       :color (agent-shell-math-renderer--foreground-for frame)
+                       :background (agent-shell-math-renderer--background-for
+                                    frame)
+                       :padding padding
+                       :font-height (agent-shell-math-renderer--font-height
+                                     buffer))
+                      inline
+                      (agent-shell-math-renderer--help-echo
+                       doc latex engine fallback))))))))))))))
 
 (defun agent-shell-math-renderer--refresh-buffer (buffer &optional recompile)
   "Re-render every display-math region in BUFFER for the current colors.
@@ -1241,6 +1288,7 @@ fast and untouched buffers refresh lazily when next displayed."
     agent-shell-math-renderer-rescale-inline
     agent-shell-math-renderer-rescale-display
     agent-shell-math-renderer-center-display-math
+    agent-shell-math-renderer-render-on-non-graphic
     latex-to-svg-backend-preamble
     latex-to-svg-backend-appended-preamble
     latex-to-svg-backend-preamble-not-precompiled
