@@ -29,6 +29,8 @@ round-trip renderable source.
   (`C-x C-+` / `C-x C--`), and every equation re-sizes to match.
 - **Theme-aware** — switch theme or toggle light/dark and the SVGs re-tint to
   the new foreground automatically, with no recompile.
+- **Follows its text** — an equation in a heading, a link or a block quote
+  takes the color and the font size of that text.
 - **Fast** — compilation is asynchronous (hidden behind the agent's streaming)
   and every equation is cached on disk, so repeats are instant.
 - **No special agent prompt** — works out of the box; the one thing worth
@@ -63,9 +65,10 @@ round-trip renderable source.
 - Math inside code fences and inline `` `code` `` spans is left untouched.
 
 Images are **theme-aware**: the SVG is compiled once, color-independent, and
-tinted at display time to the foreground of the `default` face on the frame
-that shows the buffer, so a theme or light/dark switch re-tints with no
-recompile. Sizing tracks the buffer font, measured on the same frame.
+tinted at display time on the frame that shows the buffer, so a theme or
+light/dark switch re-tints with no recompile. Each equation takes the
+foreground and the font size of the text at its opening delimiter, so an
+inline equation in a heading has the heading's color and size.
 
 ## Requirements
 
@@ -417,7 +420,7 @@ group (`M-x customize-group RET agent-shell-math-renderer`):
 | `agent-shell-math-renderer-quiet` | `nil` | Drop the backend's warning about an equation it cannot typeset. Configuration problems still warn. See [Quiet failures](#quiet-failures). |
 | `agent-shell-math-renderer-rescale-inline` | `1.0` | Size multiplier for inline `\(…\)` math, on top of the backend's `latex-to-svg-backend-font-scale`. Re-scales from cache; setting it updates the equations on its own. |
 | `agent-shell-math-renderer-rescale-display` | `1.0` | Size multiplier for display math (`\[…\]`, `$$…$$`, fenced), on top of `latex-to-svg-backend-font-scale`. Re-scales from cache; setting it updates the equations on its own. |
-| `agent-shell-math-renderer-foreground-color` | `nil` | Fixed tint color for equations; `nil` follows the foreground of the `default` face on the frame that shows the buffer (tracks the theme). A name that frame cannot resolve is reported with a warning and treated as `nil`. Re-tints from cache; setting it updates the equations on its own. |
+| `agent-shell-math-renderer-foreground-color` | `nil` | Color of equations in text drawn in the default foreground. An equation in colored text (a heading, a link) keeps the color of that text. `nil` follows the foreground of the `default` face on the frame that shows the buffer (tracks the theme). A name that frame cannot resolve is reported with a warning and treated as `nil`. Re-tints from cache; setting it updates the equations on its own. |
 | `agent-shell-math-renderer-background-color` | `nil` | Box color painted behind equations; `nil` is transparent. A very light gray reads best (e.g. `gray97` / `#f7f7f7`) — keep it subtle. A name the frame that shows the buffer cannot resolve is reported with a warning and treated as `nil`. Re-boxes from cache; setting it updates the equations on its own. |
 | `agent-shell-math-renderer-center-display-math` | `nil` | Center display-math equations in the window (inline math is never centered). Replaces agent-shell's indentation on that line, since the position is measured from the window. Setting it updates the equations on its own. |
 | `agent-shell-math-renderer-padding-inline` | `nil` | Padding (pt) between an inline `\(…\)` equation and the box edge. A number applies to all four sides; a list of four numbers pads each side separately — `(TOP RIGHT BOTTOM LEFT)`, so `(0 0 0 6)` is a left gutter. `0` crops to the ink; `nil` takes the value of the obsolete `agent-shell-math-renderer-padding`. Re-renders from cache; setting it updates the equations on its own. |

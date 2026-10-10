@@ -331,21 +331,24 @@ equations on its own."
   :group 'agent-shell-math-renderer)
 
 (defcustom agent-shell-math-renderer-foreground-color nil
-  "Color equations are tinted with, or nil to follow the buffer.
+  "Color of equations in text drawn in the default foreground, or nil.
 
-When nil (the default) equations are tinted with the foreground of
-the `default' face on the frame that shows the buffer, and track the
-theme.  Set to a color — a `#rrggbb' string or any name
-`color-values' understands (e.g. \"black\", \"#1a1a1a\") — to tint
-every equation with that fixed color regardless of theme.  The color
-is read on the frame that shows the buffer, and a name that frame
-cannot resolve is reported with a warning and treated as nil.
+Each equation is tinted with the foreground of the text at its opening
+delimiter, so an equation in a heading, a link or a block quote has the
+color of that text.  When that text has no foreground of its own, or
+the foreground of the `default' face, the equation is tinted with this
+color instead, if it is non-nil: a `#rrggbb' string or any name
+`color-values' understands (e.g. \"black\", \"#1a1a1a\").  Nil (the
+default) leaves those equations in the foreground of the `default'
+face, which tracks the theme.
+Colors are read on the frame that shows the buffer, and a name that
+frame cannot resolve is reported with a warning and treated as nil.
 
 Passed to `latex-to-svg-backend' as `:color', as a `#rrggbb' string;
 it re-tints from cache (no recompile).  Setting it with `setq',
 `setq-local' or Customize updates the equations on its own."
-  :type '(choice (const :tag "Follow buffer foreground" nil)
-                 (color :tag "Fixed color"))
+  :type '(choice (const :tag "Follow the default foreground" nil)
+                 (color :tag "Color for default-colored text"))
   :safe (lambda (v) (or (null v) (stringp v)))
   :group 'agent-shell-math-renderer)
 
@@ -857,7 +860,11 @@ Keeps the underlying text in place, faces the region
 INLINE non-nil typesets LATEX in text style (for `\\(...\\)'
 inline math) rather than as a display equation; it is stashed in
 `agent-shell-math-renderer-inline' so a later refresh re-renders in
-the same style.
+the same style.  The region is not rendered now but tagged
+`agent-shell-math-renderer--deferred' and rendered from a timer (see
+`agent-shell-math-renderer--render-deferred'): the faces of the text
+around it, such as a heading's or a link's, which its color and size
+follow, are put on by agent-shell's passes after this hook returns.
 
 Shared by the delimiter pass (`agent-shell-math-renderer--style-blocks'),
 the inline pass (`agent-shell-math-renderer--style-inline'), and the
@@ -877,7 +884,52 @@ the bare equation."
                  agent-shell-math-renderer-inline ,inline
                  agent-shell-markdown-frozen t
                  rear-nonsticky (agent-shell-markdown-frozen)))
-    (agent-shell-math-renderer--render buffer start end latex inline)))
+    (put-text-property start end 'agent-shell-math-renderer--deferred t)
+    (agent-shell-math-renderer--schedule-deferred buffer)))
+
+(defvar-local agent-shell-math-renderer--deferred-timer nil
+  "Timer of a pending `agent-shell-math-renderer--render-deferred'.")
+
+(defun agent-shell-math-renderer--schedule-deferred (buffer)
+  "Render BUFFER's deferred equations from a timer, once.
+Several regions tagged in one render, or in several before the timer
+runs, are rendered by the same run."
+  (with-current-buffer buffer
+    (unless agent-shell-math-renderer--deferred-timer
+      (setq agent-shell-math-renderer--deferred-timer
+            (run-at-time 0 nil #'agent-shell-math-renderer--render-deferred
+                         buffer)))))
+
+(defun agent-shell-math-renderer--render-deferred (buffer)
+  "Render each region of BUFFER tagged `agent-shell-math-renderer--deferred'.
+Runs after agent-shell's markdown passes, so the faces of the text at
+each equation's opening delimiter are the ones it ends with, and the
+region is where those passes left it: a heading or a link pass deletes
+and reinserts its text, and the tag rides along with it.  Each region
+ends where its `agent-shell-math-renderer-source' does, so two adjacent
+equations stay two."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (setq agent-shell-math-renderer--deferred-timer nil)
+      (save-restriction
+        (widen)
+        (let ((pos (point-min)))
+          (while (setq pos (text-property-not-all
+                            pos (point-max)
+                            'agent-shell-math-renderer--deferred nil))
+            (let ((end (next-single-property-change
+                        pos 'agent-shell-math-renderer-source nil (point-max)))
+                  (latex (get-text-property
+                          pos 'agent-shell-math-renderer-source))
+                  (inline (get-text-property
+                           pos 'agent-shell-math-renderer-inline)))
+              (with-silent-modifications
+                (remove-text-properties
+                 pos end '(agent-shell-math-renderer--deferred nil)))
+              (when latex
+                (agent-shell-math-renderer--render
+                 buffer pos end latex inline))
+              (setq pos end))))))))
 
 (defun agent-shell-math-renderer--overlay-image (buffer start end image
                                                         &optional inline
@@ -965,6 +1017,26 @@ per buffer rather than passed over: `font-info' returns nil for it."
                  :warning))
               nil)))))))
 
+(defun agent-shell-math-renderer--font-size-at (pos &optional buffer)
+  "Return the pixel size of the font of the text at POS in BUFFER, or nil.
+That is the pixel size of the font Emacs uses at POS, the opening
+delimiter of an equation, in a window showing BUFFER (see
+`agent-shell-math-renderer--display-window'): its em, slot 2 of
+`query-font'.  The faces at POS and their `:height' apply, and so does
+`text-scale-mode'; so would a `:height' on the face
+`agent-shell-math-renderer', which sets none.  When no font is found at
+POS, it is `agent-shell-math-renderer--font-size', which is nil when
+BUFFER is shown in no graphical window.  It mirrors the latex-to-svg
+front-end's function of the same name."
+  (let ((buffer (or buffer (current-buffer))))
+    (or (when-let* ((win (agent-shell-math-renderer--display-window buffer)))
+          (with-selected-frame (window-frame win)
+            (with-current-buffer buffer
+              (when-let* ((font (ignore-errors (font-at pos win)))
+                          (info (query-font font)))
+                (aref info 2)))))
+        (agent-shell-math-renderer--font-size buffer))))
+
 (defun agent-shell-math-renderer--display-window (buffer)
   "Return a window showing BUFFER on a graphical frame, or nil.
 Equations are measured and tinted against its frame (see
@@ -1017,17 +1089,72 @@ is reported once with `display-warning'."
              :warning))
           nil))))
 
-(defun agent-shell-math-renderer--foreground-for (frame)
-  "Return the `#rrggbb' color to tint equations with on FRAME.
-That is `agent-shell-math-renderer-foreground-color', and when that is
-nil, the foreground of the `default' face on FRAME.  Each is resolved
-on FRAME (see `agent-shell-math-renderer--hex-color').  Nil only when
-FRAME is nil: the buffer is shown in no graphical window."
+(defun agent-shell-math-renderer--text-foreground (pos &optional frame)
+  "Return the foreground the faces of the text at POS give it, or nil.
+Follows `foreground-color-at-point' (see `faces--attribute-at-point'),
+with four differences.  It reads text properties only, not overlays.
+It reads the faces on FRAME (nil: the selected frame).  It skips the
+face `agent-shell-math-renderer', which this package puts on every
+equation, so the face of the text around the equation decides.  When
+no other face at POS specifies a foreground, it returns nil, not the
+foreground of the `default' face.
+
+The faces are the `font-lock-face' property when `font-lock-mode' is
+on and the text has one, else the `face' property: a face, a list of
+faces (the first that specifies a foreground wins), or an anonymous
+face such as (:foreground \"gold\") or (foreground-color . \"gold\").
+
+It is a copy of the latex-to-svg front-end's function of the same
+name, but for the skipped face; `scripts/emacs-faces-check.el' watches
+the two Emacs functions it follows."
+  (let ((faces (or (and font-lock-mode
+                        (get-text-property pos 'font-lock-face))
+                   (get-text-property pos 'face)))
+        (found nil))
+    (dolist (face (if (face-list-p faces) faces (list faces)))
+      (cond (found)
+            ((eq face 'agent-shell-math-renderer))
+            ((and face (symbolp face))
+             (let ((value (face-attribute-specified-or
+                           (face-attribute face :foreground frame t)
+                           nil)))
+               (unless (member value '(nil "unspecified-fg" "unspecified-bg"))
+                 (setq found value))))
+            ((consp face)
+             (setq found (cond ((memq 'foreground-color face)
+                                (cdr (memq 'foreground-color face)))
+                               ((memq :foreground face)
+                                (cadr (memq :foreground face))))))))
+    found))
+
+(defun agent-shell-math-renderer--default-foreground-p (color &optional frame)
+  "Return non-nil if COLOR is the foreground of the `default' face on FRAME.
+Colors compare by value, so \"white\" and \"#ffffff\" are the same.  A
+color without values, such as \"unspecified-fg\" on a terminal, is
+never the default."
+  (let ((rgb (color-values color frame)))
+    (and rgb
+         (equal rgb (color-values (face-foreground 'default frame t) frame)))))
+
+(defun agent-shell-math-renderer--foreground-for (pos frame)
+  "Return the `#rrggbb' color to tint the equation that opens at POS with.
+That is the foreground of the text at POS, the opening delimiter of the
+equation (see `agent-shell-math-renderer--text-foreground'), read on
+FRAME.  When the text has no foreground of its own, or the foreground
+of the `default' face, it is `agent-shell-math-renderer-foreground-color',
+and when that is nil, the foreground of the `default' face on FRAME.
+Each is resolved on FRAME (see `agent-shell-math-renderer--hex-color').
+Nil only when FRAME is nil: the buffer is shown in no graphical window."
   (when frame
-    (or (agent-shell-math-renderer--option-color
-         'agent-shell-math-renderer-foreground-color frame)
-        (agent-shell-math-renderer--hex-color
-         (face-foreground 'default frame t) frame))))
+    (let ((text (agent-shell-math-renderer--text-foreground pos frame)))
+      (or (and text
+               (not (agent-shell-math-renderer--default-foreground-p
+                     text frame))
+               (agent-shell-math-renderer--hex-color text frame))
+          (agent-shell-math-renderer--option-color
+           'agent-shell-math-renderer-foreground-color frame)
+          (agent-shell-math-renderer--hex-color
+           (face-foreground 'default frame t) frame)))))
 
 (defun agent-shell-math-renderer--background-for (frame)
   "Return the `#rrggbb' color of the box behind each equation, or nil.
@@ -1105,9 +1232,11 @@ to the buffer font at display time, the latter by
 are read on the frame that shows BUFFER
 \(`agent-shell-math-renderer--foreground-for' /
 `agent-shell-math-renderer--background-for', via `:color' /
-`:background'), and so is the size of the buffer font, its em
-\(`agent-shell-math-renderer--font-size', via `:font-size'), so
-neither depends on which frame is selected.  The padding is
+`:background'), and so is the size of the font, its em (via
+`:font-size'), so neither depends on which frame is selected.  The
+equation takes the color and the font size of the text at START, its
+opening delimiter, so one in a heading or a link looks like that text
+\(`agent-shell-math-renderer--font-size-at').  The padding is
 `agent-shell-math-renderer--padding-for' (via `:padding').  When
 BUFFER is shown in no graphical window, all three are nil: the backend
 compiles the SVG and returns no image, and the display hook re-renders
@@ -1123,7 +1252,7 @@ then."
       (with-current-buffer buffer
         (setq agent-shell-math-renderer--rendered-appearance nil)))
      (t
-      (let* ((font-size (agent-shell-math-renderer--font-size buffer))
+      (let* ((font-size (agent-shell-math-renderer--font-size-at start buffer))
              (doc (agent-shell-math-renderer--wrap latex inline))
              (engine agent-shell-math-renderer-engine)
              (fallback (agent-shell-math-renderer--fallback-for engine))
@@ -1131,7 +1260,7 @@ then."
              (rescale (if inline
                           agent-shell-math-renderer-rescale-inline
                         agent-shell-math-renderer-rescale-display))
-             (color (agent-shell-math-renderer--foreground-for frame))
+             (color (agent-shell-math-renderer--foreground-for start frame))
              (background (agent-shell-math-renderer--background-for frame))
              (padding (agent-shell-math-renderer--padding-for inline))
              (image (latex-to-svg-backend doc :engine engine :fallback fallback
@@ -1171,12 +1300,12 @@ then."
                       (latex-to-svg-backend
                        doc :engine engine :fallback fallback :quiet quiet
                        :rescale-by rescale
-                       :color (agent-shell-math-renderer--foreground-for frame)
+                       :color (agent-shell-math-renderer--foreground-for s frame)
                        :background (agent-shell-math-renderer--background-for
                                     frame)
                        :padding padding
-                       :font-size (agent-shell-math-renderer--font-size
-                                   buffer))
+                       :font-size (agent-shell-math-renderer--font-size-at
+                                   s buffer))
                       inline
                       (agent-shell-math-renderer--help-echo
                        doc latex engine fallback))))))))))))))

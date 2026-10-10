@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Each equation takes the color and the font size of the text at its
+  opening delimiter: one in a heading, a link or a block quote has the
+  color and the size of that text. The color is read again at every
+  refresh, so a theme change re-tints them. Equations in plain text look
+  as before.
+
 ### Changed
 
+- `agent-shell-math-renderer-foreground-color` now colors the equations
+  in text drawn in the default foreground; an equation in colored text
+  keeps the color of the text. Before, it colored every equation.
 - Equations are sized by the em of the buffer font, the pixel size Emacs
   opened the `default` face's font at, passed to the backend as
   `:font-size`: a letter in an equation is as large as the same letter in
@@ -49,6 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for it.
 - The check for a theme or font change does nothing while no graphical
   window shows the buffer.
+
+### Fixed
+
+- An inline equation in a heading or a link got no image when it was not
+  yet in the cache: the heading's and the link's passes delete and
+  reinsert their text, which collapsed the region the compile's callback
+  held. Equations are now rendered after those passes.
 
 ## [0.13.0] - 2026-10-09
 

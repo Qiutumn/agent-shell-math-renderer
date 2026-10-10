@@ -1237,6 +1237,234 @@ graphical frame is needed."
     (should (equal '("#111111" "#eeeeee" 20)
                    (agent-shell-math-renderer--appearance)))))
 
+;;;; Equations take the color and the size of their text
+
+(defface agent-shell-math-renderer-tests--gold '((t :foreground "gold"))
+  "A test face with a foreground."
+  :group 'agent-shell-math-renderer)
+
+(defface agent-shell-math-renderer-tests--inherits-gold
+  '((t :inherit agent-shell-math-renderer-tests--gold))
+  "A test face whose foreground comes through `:inherit'."
+  :group 'agent-shell-math-renderer)
+
+(defconst agent-shell-math-renderer-tests--face-values
+  '(nil
+    bold                                  ; a face without a foreground
+    agent-shell-math-renderer-tests--gold
+    agent-shell-math-renderer-tests--inherits-gold
+    (bold agent-shell-math-renderer-tests--gold) ; the first with one wins
+    (agent-shell-math-renderer-tests--inherits-gold bold)
+    (:foreground "red")
+    (:weight bold :foreground "red")
+    (foreground-color . "blue"))
+  "Values of the `face' property our reader and Emacs's must agree on.")
+
+(ert-deftest agent-shell-math-renderer-text-foreground-matches-emacs ()
+  ;; Drift guard: on text with no overlay, `--text-foreground' gives what
+  ;; Emacs's `foreground-color-at-point' gives, for the forms a `face'
+  ;; property takes, from the `face' and the `font-lock-face' property.
+  ;; Where ours is nil, Emacs gives the foreground of the `default' face.
+  (dolist (prop '(face font-lock-face))
+    (dolist (value agent-shell-math-renderer-tests--face-values)
+      (with-temp-buffer
+        (insert "\\(x\\)")
+        (put-text-property 1 2 prop value)
+        (let ((font-lock-mode (eq prop 'font-lock-face)))
+          (goto-char 1)
+          (should (equal (list prop value
+                               (or (agent-shell-math-renderer--text-foreground 1)
+                                   (face-attribute 'default :foreground)))
+                         (list prop value (foreground-color-at-point)))))))))
+
+(ert-deftest agent-shell-math-renderer-text-foreground-skips-own-face ()
+  ;; The face this package puts on every equation does not decide its color,
+  ;; first or last in the list; the face of the text around it does.
+  (with-temp-buffer
+    (insert "\\(x\\)")
+    (dolist (case '((agent-shell-math-renderer . nil)
+                    ((agent-shell-math-renderer) . nil)
+                    ((agent-shell-math-renderer agent-shell-math-renderer-tests--gold)
+                     . "gold")
+                    ((agent-shell-math-renderer-tests--gold agent-shell-math-renderer)
+                     . "gold")))
+      (put-text-property 1 2 'face (car case))
+      (should (equal (cdr case)
+                     (agent-shell-math-renderer--text-foreground 1))))))
+
+(defconst agent-shell-math-renderer-tests--colors
+  '(("gold" 65535 55255 0)
+    ("red" 65535 0 0)
+    ("white" 65535 65535 65535))
+  "The values `color-values' gives these names on a graphical frame.
+A batch Emacs resolves a name to the nearest of its terminal's colors.")
+
+(defmacro agent-shell-math-renderer-tests--with-frame (&rest body)
+  "Run BODY with every buffer shown on the selected frame, as if graphical.
+The `default' face is white on black there, `color-values' resolves the
+names in `agent-shell-math-renderer-tests--colors' and `#rrggbb'
+strings, and the buffer font has a pixel size of 18."
+  (declare (indent 0) (debug t))
+  `(let ((fg (face-attribute 'default :foreground))
+         (bg (face-attribute 'default :background)))
+     (unwind-protect
+         (progn
+           (set-face-attribute 'default nil :foreground "white" :background "black")
+           (cl-letf (((symbol-function 'agent-shell-math-renderer--graphical-p)
+                      #'always)
+                     ((symbol-function 'agent-shell-math-renderer--display-window)
+                      (lambda (_buffer) (selected-window)))
+                     ((symbol-function 'agent-shell-math-renderer--display-frame)
+                      (lambda (_buffer) (selected-frame)))
+                     ((symbol-function 'agent-shell-math-renderer--font-size)
+                      (lambda (&rest _) 18))
+                     ((symbol-function 'color-values)
+                      (lambda (color &optional _frame)
+                        (if (string-match-p "\\`#[[:xdigit:]]\\{6\\}\\'" color)
+                            (mapcar (lambda (i)
+                                      (* 257 (string-to-number
+                                              (substring color i (+ i 2)) 16)))
+                                    '(1 3 5))
+                          (cdr (assoc color agent-shell-math-renderer-tests--colors))))))
+             ,@body))
+       (set-face-attribute 'default nil :foreground fg :background bg))))
+
+(ert-deftest agent-shell-math-renderer-foreground-for-rule ()
+  ;; An equation in colored text takes the text's color.  In text with no
+  ;; foreground of its own, or the `default' face's, it takes
+  ;; `-foreground-color', and when that is nil the `default' face's.  Each
+  ;; is a `#rrggbb' string; with no frame, nil.
+  (agent-shell-math-renderer-tests--with-frame
+    (with-temp-buffer
+      (insert "\\(a\\) \\(b\\) \\(c\\)")
+      (put-text-property 7 8 'face 'agent-shell-math-renderer-tests--gold)
+      (put-text-property 13 14 'face '(:foreground "#ffffff"))
+      (let ((frame (selected-frame)))
+        (let ((agent-shell-math-renderer-foreground-color nil))
+          (should (equal (agent-shell-math-renderer--foreground-for 1 frame) "#ffffff"))
+          (should (equal (agent-shell-math-renderer--foreground-for 7 frame) "#ffd700"))
+          (should (equal (agent-shell-math-renderer--foreground-for 13 frame) "#ffffff"))
+          (should-not (agent-shell-math-renderer--foreground-for 7 nil)))
+        (let ((agent-shell-math-renderer-foreground-color "#123456"))
+          (should (equal (agent-shell-math-renderer--foreground-for 1 frame) "#123456"))
+          (should (equal (agent-shell-math-renderer--foreground-for 7 frame) "#ffd700"))
+          (should (equal (agent-shell-math-renderer--foreground-for 13 frame)
+                         "#123456")))))))
+
+(ert-deftest agent-shell-math-renderer-render-is-deferred ()
+  ;; Every equation, inline or display, is tagged and rendered from one
+  ;; timer, after agent-shell's passes, in its own style.  Two adjacent
+  ;; equations stay two.
+  (agent-shell-math-renderer-tests--with-backend-calls calls
+    (let ((scheduled nil))
+      (cl-letf (((symbol-function 'run-at-time)
+                 (lambda (&rest args) (push args scheduled) 'timer)))
+        (with-temp-buffer
+          (insert "\\(a\\)\\(b\\) \\[c\\]")
+          (agent-shell-math-renderer--apply-region (current-buffer) 1 6 "a" t)
+          (agent-shell-math-renderer--apply-region (current-buffer) 6 11 "b" t)
+          (should-not calls)
+          (should (get-text-property 1 'agent-shell-math-renderer--deferred))
+          (agent-shell-math-renderer--apply-region (current-buffer) 12 17 "c")
+          (should-not calls)
+          (should (= 1 (length scheduled)))
+          (agent-shell-math-renderer--render-deferred (current-buffer))
+          (should-not (text-property-not-all
+                       1 (point-max) 'agent-shell-math-renderer--deferred nil))
+          (should-not agent-shell-math-renderer--deferred-timer)
+          (should (equal '("$a$" "$b$" "\\[ c \\]")
+                         (sort (delete-dups (mapcar #'car calls)) #'string<))))))))
+
+(ert-deftest agent-shell-math-renderer-equation-tinted-like-its-text ()
+  ;; Through agent-shell's passes, an equation in a heading is tinted with
+  ;; the heading's color; one in plain text, inline or display, with the
+  ;; `default' face's.  The color is read again on refresh, so a
+  ;; face changed in the meantime is followed.
+  (let ((header (face-attribute 'agent-shell-markdown-header-1 :foreground))
+        (header-inherit (face-attribute 'agent-shell-markdown-header-1 :inherit)))
+    (unwind-protect
+        (progn
+          (set-face-attribute 'agent-shell-markdown-header-1 nil
+                              :foreground "gold" :inherit 'unspecified)
+          (agent-shell-math-renderer-tests--enabled
+            (agent-shell-math-renderer-tests--with-frame
+              (let ((colors nil))
+                (cl-letf (((symbol-function 'latex-to-svg-backend)
+                           (lambda (latex &rest args)
+                             (agent-shell-math-renderer-tests--check-colors args)
+                             (push (cons latex (plist-get args :color)) colors)
+                             nil)))
+                  (with-temp-buffer
+                    (insert "# Head \\(h\\)\n\nplain \\(p\\)\n\n\\[ d \\]\n")
+                    (agent-shell-markdown-replace-markup)
+                    (agent-shell-math-renderer--render-deferred (current-buffer))
+                    (should (equal (sort (delete-dups colors)
+                                         (lambda (x y) (string< (car x) (car y))))
+                                   '(("$h$" . "#ffd700") ("$p$" . "#ffffff")
+                                     ("\\[ d \\]" . "#ffffff"))))
+                    (setq colors nil)
+                    (set-face-attribute 'agent-shell-markdown-header-1 nil
+                                        :foreground "red")
+                    (agent-shell-math-renderer-refresh (current-buffer))
+                    (should (equal (cdr (assoc "$h$" colors)) "#ff0000"))))))))
+      (set-face-attribute 'agent-shell-markdown-header-1 nil
+                          :foreground header :inherit header-inherit))))
+
+(ert-deftest agent-shell-math-renderer-image-lands-in-a-heading ()
+  ;; A heading's pass deletes and reinserts its text; an inline equation in
+  ;; it gets its image when an uncached compile ends, since it is rendered,
+  ;; and its region marked, after that pass.
+  (agent-shell-math-renderer-tests--enabled
+    (agent-shell-math-renderer-tests--with-frame
+      (let ((callbacks nil)
+            (ready nil))
+        (cl-letf (((symbol-function 'latex-to-svg-backend)
+                   (lambda (_latex &rest args)
+                     (cond ((plist-get args :callback)
+                            (push (plist-get args :callback) callbacks)
+                            nil)
+                           (ready '(image :type svg :data "<svg/>"))))))
+          (with-temp-buffer
+            (insert "# Head \\(x\\) tail\n")
+            (agent-shell-markdown-replace-markup)
+            (agent-shell-math-renderer--render-deferred (current-buffer))
+            (setq ready t)
+            (mapc #'funcall callbacks)
+            (goto-char (point-min))
+            (search-forward "\\(")
+            (should (eq 'image (car-safe (get-text-property
+                                          (match-beginning 0) 'display))))))))))
+
+(ert-deftest agent-shell-math-renderer-equation-sized-like-its-text ()
+  ;; An equation, inline or display, is sized by the font at its opening
+  ;; delimiter, its em (slot 2 of `query-font').  Batch has no graphical
+  ;; window, so the fonts are stubbed: text marked `test-big' gets a font
+  ;; of 27 pixels, other text one of 18.
+  (agent-shell-math-renderer-tests--with-frame
+    (let ((sizes nil))
+      (cl-letf (((symbol-function 'latex-to-svg-backend)
+                 (lambda (latex &rest args)
+                   (push (cons latex (plist-get args :font-size)) sizes)
+                   nil))
+                ((symbol-function 'font-at)
+                 (lambda (pos &rest _)
+                   (if (get-text-property pos 'test-big) 'big-font 'plain-font)))
+                ((symbol-function 'query-font)
+                 (lambda (font)
+                   (if (eq font 'big-font)
+                       [nil nil 27 nil 28 8 nil nil nil]
+                     [nil nil 18 nil 18 5 nil nil nil]))))
+        (with-temp-buffer
+          (insert "\\(a\\) \\(b\\) \\[c\\]")
+          (put-text-property 7 8 'test-big t)
+          (put-text-property 13 14 'test-big t)
+          (agent-shell-math-renderer--render (current-buffer) 1 6 "a" t)
+          (agent-shell-math-renderer--render (current-buffer) 7 12 "b" t)
+          (agent-shell-math-renderer--render (current-buffer) 13 18 "c")
+          (should (equal (sort (delete-dups sizes)
+                               (lambda (x y) (string< (car x) (car y))))
+                         '(("$a$" . 18) ("$b$" . 27) ("\\[ c \\]" . 27)))))))))
+
 (ert-deftest agent-shell-math-renderer-help-echo-names-the-engine ()
   ;; Once the image is laid, the tooltip names the engine before the LaTeX,
   ;; and says so when the picture came from the fallback.  Compared after
