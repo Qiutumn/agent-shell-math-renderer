@@ -710,6 +710,20 @@ after text.
                      "x"))
       (should-not (get-text-property 0 'agent-shell-math-renderer-inline display)))))
 
+(defmacro agent-shell-math-renderer-tests--with-appearance (font-height &rest body)
+  "Evaluate BODY with the buffer shown on a graphical frame.
+The `default' face there is #000000 on #ffffff and the font height is
+FONT-HEIGHT, which is what `agent-shell-math-renderer--appearance'
+reads."
+  (declare (indent 1) (debug t))
+  `(cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
+              (lambda (&rest _) (selected-frame)))
+             ((symbol-function 'face-foreground) (lambda (&rest _) "#000000"))
+             ((symbol-function 'face-background) (lambda (&rest _) "#ffffff"))
+             ((symbol-function 'agent-shell-math-renderer--font-height)
+              (lambda (&rest _) ,font-height)))
+     ,@body))
+
 (ert-deftest agent-shell-math-renderer-refresh-if-changed-detects-font ()
   ;; `--refresh-if-changed' triggers a refresh when only the font height
   ;; moved (colors unchanged), and targets just the current buffer (the
@@ -721,16 +735,19 @@ after text.
       ;; Buffer was last rendered at font height 20; same colors.
       (setq agent-shell-math-renderer--rendered-appearance
             '("#000000" "#ffffff" 20))
-      (cl-letf (((symbol-function 'display-graphic-p) (lambda (&rest _) t))
-                ((symbol-function 'latex-to-svg-backend--svg-color)
-                 (lambda (_face attr _fallback)
-                   (if (eq attr :foreground) "#000000" "#ffffff")))
-                ((symbol-function 'default-font-height) (lambda (&rest _) 30))
-                ((symbol-function 'agent-shell-math-renderer-refresh)
-                 (lambda (&optional buffer) (setq refreshed (or buffer t)))))
-        (agent-shell-math-renderer--refresh-if-changed))
+      (agent-shell-math-renderer-tests--with-appearance 30
+        (cl-letf (((symbol-function 'agent-shell-math-renderer-refresh)
+                   (lambda (&optional buffer) (setq refreshed (or buffer t)))))
+          (agent-shell-math-renderer--refresh-if-changed)))
       ;; Refreshed, and scoped to this buffer.
-      (should (eq refreshed (current-buffer))))))
+      (should (eq refreshed (current-buffer)))
+      ;; At the recorded height nothing changed, so nothing is refreshed.
+      (setq refreshed nil)
+      (agent-shell-math-renderer-tests--with-appearance 20
+        (cl-letf (((symbol-function 'agent-shell-math-renderer-refresh)
+                   (lambda (&optional buffer) (setq refreshed (or buffer t)))))
+          (agent-shell-math-renderer--refresh-if-changed)))
+      (should-not refreshed))))
 
 (ert-deftest agent-shell-math-renderer-font-height-reports-unmeasurable-font ()
   ;; A font the frame cannot measure leaves the height unknown, so the backend
@@ -758,14 +775,10 @@ after text.
     (with-temp-buffer
       (setq agent-shell-math-renderer--present nil)
       (setq agent-shell-math-renderer--rendered-appearance nil)
-      (cl-letf (((symbol-function 'display-graphic-p) (lambda (&rest _) t))
-                ((symbol-function 'latex-to-svg-backend--svg-color)
-                 (lambda (_face attr _fallback)
-                   (if (eq attr :foreground) "#000000" "#ffffff")))
-                ((symbol-function 'default-font-height) (lambda (&rest _) 30))
-                ((symbol-function 'agent-shell-math-renderer-refresh)
-                 (lambda (&optional _buffer) (setq refreshed t))))
-        (agent-shell-math-renderer--refresh-if-changed))
+      (agent-shell-math-renderer-tests--with-appearance 30
+        (cl-letf (((symbol-function 'agent-shell-math-renderer-refresh)
+                   (lambda (&optional _buffer) (setq refreshed t))))
+          (agent-shell-math-renderer--refresh-if-changed)))
       (should-not refreshed))))
 
 (ert-deftest agent-shell-math-renderer-centers-display-math-only ()
