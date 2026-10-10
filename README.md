@@ -22,8 +22,9 @@ round-trip renderable source.
 
 - **Crisp at any size** — equations are vector SVGs, not bitmaps: no pixelation,
   sharp on HiDPI/Retina displays and at every zoom level.
-- **Font-matched sizing** — equations render at the buffer's font size, so math
-  sits at the same weight as the surrounding text.
+- **Font-matched sizing** — equations render at the buffer's font size, so a
+  letter in an equation is as large as the same letter in the text, and an
+  inline equation sits on the text's baseline.
 - **Rescales with your font** — change the buffer or global font size, or zoom
   (`C-x C-+` / `C-x C--`), and every equation re-sizes to match.
 - **Theme-aware** — switch theme or toggle light/dark and the SVGs re-tint to
@@ -74,7 +75,7 @@ recompile. Sizing tracks the buffer font, measured on the same frame.
   suppression the hook relies on)
 - **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.14.0
   or newer (the release that reads no faces and no frames: this package
-  passes the tint and the font height it reads on the frame that shows the
+  passes the tint and the font size it reads on the frame that shows the
   buffer) — the backend (equation compile, caching, display-time tint/scale)
   is factored out into this standalone library. All typesetting knobs (LaTeX /
   dvisvgm / RaTeX / texres programs, preamble, cache directory, font scale)
@@ -492,10 +493,11 @@ Other options apply to equations rendered afterwards.
   time. Because the cache is content-addressed, it is shared with any other
   `latex-to-svg-backend` front-end (e.g. an Org previewer) — the same equation compiles
   once across all of them.
-- **Sizing** tracks the buffer font: the package measures `default-font-height`
-  against the buffer's *actual* display frame and passes it to the backend, so
-  the equation matches the surrounding text regardless of which frame is
-  selected (e.g. an async compile finishing while a TTY/daemon frame is
+- **Sizing** tracks the buffer font: the package measures the size the
+  `default` face's font was opened at, its em (slot 2 of `font-info`, which
+  follows `text-scale-mode`), against the buffer's *actual* display frame and
+  passes it to the backend, so the equation matches the surrounding text
+  regardless of which frame is selected (e.g. an async compile finishing while a TTY/daemon frame is
   current). If the buffer is shown in no window when an equation is ready, the
   SVG is compiled and cached but not yet sized; it is drawn the moment the
   buffer is displayed (the same display hook that re-tints on theme changes),

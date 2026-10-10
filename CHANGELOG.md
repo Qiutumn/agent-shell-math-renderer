@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Equations are sized by the em of the buffer font, the pixel size Emacs
+  opened the `default` face's font at, passed to the backend as
+  `:font-size`: a letter in an equation is as large as the same letter in
+  the text, as in a LaTeX document. Before, they were sized by the line
+  height (`default-font-height`), which is larger than the em, so
+  equations came out larger than the text. The size no longer differs
+  between Emacs ports, and inline equations sit on the text's baseline;
+  both come from `latex-to-svg-backend` 0.14.0. Every equation compiles
+  once more after the update, for the backend's new cache.
+
 - In an Emacs that cannot display SVG images (built without librsvg), the
   equations are still sent to the backend, which warns once per session
   and returns no image; the LaTeX source stays. Before, this package sent
