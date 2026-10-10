@@ -62,8 +62,9 @@ round-trip renderable source.
 - Math inside code fences and inline `` `code` `` spans is left untouched.
 
 Images are **theme-aware**: the SVG is compiled once, color-independent, and
-tinted to the buffer foreground at display time, so a theme or light/dark
-switch re-tints with no recompile. Sizing tracks the buffer font.
+tinted at display time to the foreground of the `default` face on the frame
+that shows the buffer, so a theme or light/dark switch re-tints with no
+recompile. Sizing tracks the buffer font, measured on the same frame.
 
 ## Requirements
 
@@ -71,13 +72,13 @@ switch re-tints with no recompile. Sizing tracks the buffer font.
 - **[`agent-shell`](https://github.com/xenodium/agent-shell)** (0.66.1 or newer —
   the release with the backslash-escape pass and the right-label render-function
   suppression the hook relies on)
-- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.12.1
-  or newer (the release that adds the texres engine and reports a missing
-  program the same way for every engine) — the
-  backend (equation compile, caching, display-time tint/scale) is
-  factored out into this standalone library. All typesetting knobs (LaTeX /
-  dvisvgm / RaTeX / texres programs, preamble, cache directory, font scale, placeholder /
-  non-graphic behaviour) live in its `latex-to-svg-backend-*` customization group.
+- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.14.0
+  or newer (the release that reads no faces and no frames: this package
+  passes the tint and the font height it reads on the frame that shows the
+  buffer) — the backend (equation compile, caching, display-time tint/scale)
+  is factored out into this standalone library. All typesetting knobs (LaTeX /
+  dvisvgm / RaTeX / texres programs, preamble, cache directory, font scale)
+  live in its `latex-to-svg-backend-*` customization group.
 - A **LaTeX toolchain** providing `latex` and `dvisvgm` (e.g. TeX Live /
   MacTeX; `dvisvgm` ships with TeX Live), or RaTeX's `render-svg` for the
   `ratex` engine, or texres and `pdftocairo` for the `texres` engine (see
@@ -415,14 +416,14 @@ group (`M-x customize-group RET agent-shell-math-renderer`):
 | `agent-shell-math-renderer-quiet` | `nil` | Drop the backend's warning about an equation it cannot typeset. Configuration problems still warn. See [Quiet failures](#quiet-failures). |
 | `agent-shell-math-renderer-rescale-inline` | `1.0` | Size multiplier for inline `\(…\)` math, on top of the backend's `latex-to-svg-backend-font-scale`. Re-scales from cache; setting it updates the equations on its own. |
 | `agent-shell-math-renderer-rescale-display` | `1.0` | Size multiplier for display math (`\[…\]`, `$$…$$`, fenced), on top of `latex-to-svg-backend-font-scale`. Re-scales from cache; setting it updates the equations on its own. |
-| `agent-shell-math-renderer-foreground-color` | `nil` | Fixed tint color for equations; `nil` follows the buffer foreground (tracks the theme). Re-tints from cache; setting it updates the equations on its own. |
-| `agent-shell-math-renderer-background-color` | `nil` | Box color painted behind equations; `nil` is transparent. A very light gray reads best (e.g. `gray97` / `#f7f7f7`) — keep it subtle. Re-boxes from cache; setting it updates the equations on its own. |
+| `agent-shell-math-renderer-foreground-color` | `nil` | Fixed tint color for equations; `nil` follows the foreground of the `default` face on the frame that shows the buffer (tracks the theme). A name that frame cannot resolve is reported with a warning and treated as `nil`. Re-tints from cache; setting it updates the equations on its own. |
+| `agent-shell-math-renderer-background-color` | `nil` | Box color painted behind equations; `nil` is transparent. A very light gray reads best (e.g. `gray97` / `#f7f7f7`) — keep it subtle. A name the frame that shows the buffer cannot resolve is reported with a warning and treated as `nil`. Re-boxes from cache; setting it updates the equations on its own. |
 | `agent-shell-math-renderer-center-display-math` | `nil` | Center display-math equations in the window (inline math is never centered). Replaces agent-shell's indentation on that line, since the position is measured from the window. Setting it updates the equations on its own. |
 | `agent-shell-math-renderer-padding-inline` | `nil` | Padding (pt) between an inline `\(…\)` equation and the box edge. A number applies to all four sides; a list of four numbers pads each side separately — `(TOP RIGHT BOTTOM LEFT)`, so `(0 0 0 6)` is a left gutter. `0` crops to the ink; `nil` takes the value of the obsolete `agent-shell-math-renderer-padding`. Re-renders from cache; setting it updates the equations on its own. |
 | `agent-shell-math-renderer-padding-display` | `nil` | Padding (pt) between a display equation (`\[…\]`, `$$…$$`, fenced) and the box edge, with the values of `-padding-inline`. Re-renders from cache; setting it updates the equations on its own. |
 
-The **backend** options (equation size, toolchain, preamble, caching,
-placeholder / non-graphic behaviour) live in the
+The **backend** options (equation size, toolchain, preamble, caching) live
+in the
 [`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend) group
 (`M-x customize-group RET latex-to-svg-backend`):
 
@@ -433,8 +434,6 @@ placeholder / non-graphic behaviour) live in the
 | `latex-to-svg-backend-preamble` | standalone + amsmath/amssymb/xcolor | The base LaTeX preamble. |
 | `latex-to-svg-backend-latex-program` | `"latex"` | Program compiling LaTeX → DVI. |
 | `latex-to-svg-backend-dvisvgm-program` | `"dvisvgm"` | Program converting DVI → SVG. |
-| `latex-to-svg-backend-use-placeholder` | `nil` | Draw the placeholder panel instead of typesetting. |
-| `latex-to-svg-backend-render-on-non-graphic` | `nil` | Compile images even on a non-graphical frame (for daemon setups viewed later in a GUI). |
 | `latex-to-svg-backend-cache-directory` | `nil` | Where SVGs are cached; `nil` uses `$XDG_CACHE_HOME/latex-to-svg-backend/`. |
 
 The `agent-shell-math-renderer` face styles the raw LaTeX shown on a

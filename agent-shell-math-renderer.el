@@ -7,7 +7,7 @@
 ;; Assisted-by: Claude:claude-opus-4-8
 ;; URL: https://github.com/alberti42/agent-shell-math-renderer
 ;; Version: 0.13.0
-;; Package-Requires: ((emacs "29.1") (agent-shell "0.66.1") (latex-to-svg-backend "0.12.1"))
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.66.1") (latex-to-svg-backend "0.14.0"))
 ;; Keywords: tex, llm, math, education
 
 ;; This package is free software; you can redistribute it and/or modify
@@ -71,8 +71,8 @@
 ;; the engine and the program, and the source stays as text.  The engine
 ;; that typesets (LaTeX, RaTeX without a TeX installation, or texres) is
 ;; chosen by `agent-shell-math-renderer-engine'.  Backend settings (programs,
-;; preamble, cache directory, font scale, placeholder / non-graphic
-;; behaviour) live in the `latex-to-svg-backend-*' customization group.
+;; preamble, cache directory, font scale) live in the
+;; `latex-to-svg-backend-*' customization group.
 
 ;;; Code:
 
@@ -333,16 +333,17 @@ equations on its own."
 (defcustom agent-shell-math-renderer-foreground-color nil
   "Color equations are tinted with, or nil to follow the buffer.
 
-When nil (the default) equations are tinted with the buffer
-foreground and track the theme (see
-`latex-to-svg-backend-foreground-color').  Set to a color — a
-`#rrggbb' string or any name `color-name-to-rgb' understands
-\(e.g. \"black\", \"#1a1a1a\") — to tint every equation with that
-fixed color regardless of theme.
+When nil (the default) equations are tinted with the foreground of
+the `default' face on the frame that shows the buffer, and track the
+theme.  Set to a color — a `#rrggbb' string or any name
+`color-values' understands (e.g. \"black\", \"#1a1a1a\") — to tint
+every equation with that fixed color regardless of theme.  The color
+is read on the frame that shows the buffer, and a name that frame
+cannot resolve is reported with a warning and treated as nil.
 
-Passed to `latex-to-svg-backend' as `:color'; it re-tints from cache
-\(no recompile).  Setting it with `setq', `setq-local' or Customize updates the
-equations on its own."
+Passed to `latex-to-svg-backend' as `:color', as a `#rrggbb' string;
+it re-tints from cache (no recompile).  Setting it with `setq',
+`setq-local' or Customize updates the equations on its own."
   :type '(choice (const :tag "Follow buffer foreground" nil)
                  (color :tag "Fixed color"))
   :safe (lambda (v) (or (null v) (stringp v)))
@@ -353,13 +354,15 @@ equations on its own."
 
 When nil (the default) equations are transparent and blend into
 the buffer.  Set to a color — a `#rrggbb' string or any name
-`color-name-to-rgb' understands (e.g. \"gray97\", \"#f7f7f7\") — to
+`color-values' understands (e.g. \"gray97\", \"#f7f7f7\") — to
 paint that color behind every equation.  A very light gray reads
-best; keep it subtle so it doesn't fight the buffer background.
+best; keep it subtle so it doesn't fight the buffer background.  The
+color is read on the frame that shows the buffer, and a name that
+frame cannot resolve is reported with a warning and treated as nil.
 
-Passed to `latex-to-svg-backend' as `:background'; it applies from
-cache (no recompile).  Setting it with `setq', `setq-local' or
-Customize updates the equations on its own."
+Passed to `latex-to-svg-backend' as `:background', as a `#rrggbb'
+string; it applies from cache (no recompile).  Setting it with
+`setq', `setq-local' or Customize updates the equations on its own."
   :type '(choice (const :tag "Transparent" nil)
                  (color :tag "Box color"))
   :safe (lambda (v) (or (null v) (stringp v)))
@@ -469,7 +472,7 @@ submitted.  Rendering is deferred out of the submit command."
 (defvar-local agent-shell-math-renderer--rendered-appearance nil
   "The appearance signature this buffer's equations were rendered for.
 A list (FOREGROUND BACKGROUND FONT-HEIGHT) — see
-`latex-to-svg-backend-appearance'.  Buffer-local:
+`agent-shell-math-renderer--appearance'.  Buffer-local:
 each buffer tracks its own last-rendered appearance, so a refresh
 can re-render just the affected buffer and leave the others to
 re-render lazily when they are next displayed (see
@@ -941,9 +944,7 @@ buffer rather than passed over: `default-font-height' reads `font-info',
 which returns nil for a font it cannot open, and then signals
 `wrong-type-argument'."
   (let ((buffer (or buffer (current-buffer))))
-    (when-let* ((win (get-buffer-window buffer t))
-                (frame (window-frame win))
-                ((display-graphic-p frame)))
+    (when-let* ((frame (agent-shell-math-renderer--display-frame buffer)))
       (with-selected-frame frame
         (with-current-buffer buffer
           (condition-case err
@@ -957,6 +958,83 @@ which returns nil for a font it cannot open, and then signals
                         (error-message-string err))
                 :warning))
              nil)))))))
+
+(defun agent-shell-math-renderer--display-window (buffer)
+  "Return a window showing BUFFER on a graphical frame, or nil.
+Equations are measured and tinted against its frame (see
+`agent-shell-math-renderer--font-height')."
+  (when-let* ((win (get-buffer-window buffer t))
+              ((display-graphic-p (window-frame win))))
+    win))
+
+(defun agent-shell-math-renderer--display-frame (buffer)
+  "Return the graphical frame of a window showing BUFFER, or nil.
+See `agent-shell-math-renderer--display-window'."
+  (when-let* ((win (agent-shell-math-renderer--display-window buffer)))
+    (window-frame win)))
+
+(defun agent-shell-math-renderer--hex-color (color frame)
+  "Return COLOR as a `#rrggbb' string, resolved on FRAME, or nil.
+A `#rrggbb' string is returned as it is.  Other colors are read with
+`color-values', whose 16-bit components are rounded to 8 bits.  Nil
+when COLOR is nil or FRAME cannot resolve it."
+  (cond ((null color) nil)
+        ((string-match-p "\\`#[[:xdigit:]]\\{6\\}\\'" color) color)
+        ((when-let* ((values (color-values color frame)))
+           (apply #'format "#%02x%02x%02x"
+                  (mapcar (lambda (v) (round (* v 255) 65535)) values))))))
+
+(defvar agent-shell-math-renderer--warned-colors nil
+  "The (OPTION . VALUE) pairs reported as colors no frame resolved.")
+
+(defun agent-shell-math-renderer--option-color (option frame)
+  "Return the color in OPTION as a `#rrggbb' string resolved on FRAME, or nil.
+Nil when OPTION is nil.  A value FRAME cannot resolve is nil too, and
+is reported once with `display-warning'."
+  (when-let* ((color (symbol-value option)))
+    (or (agent-shell-math-renderer--hex-color color frame)
+        (let ((pair (cons option color)))
+          (unless (member pair agent-shell-math-renderer--warned-colors)
+            (push pair agent-shell-math-renderer--warned-colors)
+            (display-warning
+             'agent-shell-math-renderer
+             (format "Cannot resolve `%s' (%S) as a color; ignoring it"
+                     option color)
+             :warning))
+          nil))))
+
+(defun agent-shell-math-renderer--foreground-for (frame)
+  "Return the `#rrggbb' color to tint equations with on FRAME.
+That is `agent-shell-math-renderer-foreground-color', and when that is
+nil, the foreground of the `default' face on FRAME.  Each is resolved
+on FRAME (see `agent-shell-math-renderer--hex-color').  Nil only when
+FRAME is nil: the buffer is shown in no graphical window."
+  (when frame
+    (or (agent-shell-math-renderer--option-color
+         'agent-shell-math-renderer-foreground-color frame)
+        (agent-shell-math-renderer--hex-color
+         (face-foreground 'default frame t) frame))))
+
+(defun agent-shell-math-renderer--background-for (frame)
+  "Return the `#rrggbb' color of the box behind each equation, or nil.
+That is `agent-shell-math-renderer-background-color', resolved on
+FRAME.  Nil, a transparent box, when the option is nil or FRAME is nil."
+  (and frame
+       (agent-shell-math-renderer--option-color
+        'agent-shell-math-renderer-background-color frame)))
+
+(defun agent-shell-math-renderer--appearance (&optional buffer)
+  "Return the appearance signature of BUFFER's equations (default current).
+A list (FOREGROUND BACKGROUND FONT-HEIGHT): the foreground and the
+background of the `default' face on the frame that shows BUFFER (see
+`agent-shell-math-renderer--display-frame'), and
+`agent-shell-math-renderer--font-height'.  All three are nil when
+BUFFER is shown in no graphical window."
+  (let* ((buffer (or buffer (current-buffer)))
+         (frame (agent-shell-math-renderer--display-frame buffer)))
+    (list (and frame (face-foreground 'default frame t))
+          (and frame (face-background 'default frame t))
+          (agent-shell-math-renderer--font-height buffer))))
 
 (defun agent-shell-math-renderer--wrap (latex &optional inline)
   "Return LATEX wrapped as the string sent to the backend.
@@ -983,7 +1061,7 @@ obsolete `agent-shell-math-renderer-padding'."
   "Render LATEX over BUFFER's START..END as an equation image.
 
 Delegates typesetting to `latex-to-svg-backend': overlays the image
-immediately when available (cached SVG or placeholder), else
+immediately when available (cached SVG), else
 captures START / END as markers and overlays the result once the
 async compile finishes (so the overlay lands even after more output
 streams in).  Does nothing when equations aren't renderable (see
@@ -1002,23 +1080,24 @@ choose inline vs display style, for either engine.  The engine is
 read when the render is scheduled, so the callback of an async compile
 uses the values that compile ran with.  Color and size
 are not baked in —
-`latex-to-svg-backend' tints the color-independent SVG to the buffer
-foreground and scales it to the buffer font at display time, the
-latter by `agent-shell-math-renderer-rescale-inline' /
-`-rescale-display' (via `:rescale-by') for INLINE / display math.
-The tint, an optional box color, and its padding are overridden by
-`agent-shell-math-renderer-foreground-color' / `-background-color' /
-`agent-shell-math-renderer--padding-for' (via `:color' / `:background'
-/ `:padding'),
-all nil by default (follow the buffer foreground / transparent /
-cropped to the ink).  The buffer font height is measured against
-BUFFER's actual display frame (`agent-shell-math-renderer--font-height')
-and passed as `:font-height', so sizing does not depend on which
-frame is selected; when BUFFER is shown nowhere it is nil and the
-backend defers sizing until the buffer is displayed (the display hook
-then re-renders)."
+`latex-to-svg-backend' tints the color-independent SVG and scales it
+to the buffer font at display time, the latter by
+`agent-shell-math-renderer-rescale-inline' / `-rescale-display' (via
+`:rescale-by') for INLINE / display math.  The tint and the box color
+are read on the frame that shows BUFFER
+\(`agent-shell-math-renderer--foreground-for' /
+`agent-shell-math-renderer--background-for', via `:color' /
+`:background'), and so is the buffer font height
+\(`agent-shell-math-renderer--font-height', via `:font-height'), so
+neither depends on which frame is selected.  The padding is
+`agent-shell-math-renderer--padding-for' (via `:padding').  When
+BUFFER is shown in no graphical window all three are nil: the backend
+compiles the SVG and returns no image, and the display hook re-renders
+once the buffer is shown.  The callback of an async compile reads all
+three again, on the frame that shows BUFFER then."
   (when (latex-to-svg-backend-available-p)
-    (let* ((font-height (agent-shell-math-renderer--font-height buffer))
+    (let* ((frame (agent-shell-math-renderer--display-frame buffer))
+           (font-height (agent-shell-math-renderer--font-height buffer))
            (doc (agent-shell-math-renderer--wrap latex inline))
            (engine agent-shell-math-renderer-engine)
            (fallback (agent-shell-math-renderer--fallback-for engine))
@@ -1026,8 +1105,8 @@ then re-renders)."
            (rescale (if inline
                         agent-shell-math-renderer-rescale-inline
                       agent-shell-math-renderer-rescale-display))
-           (color agent-shell-math-renderer-foreground-color)
-           (background agent-shell-math-renderer-background-color)
+           (color (agent-shell-math-renderer--foreground-for frame))
+           (background (agent-shell-math-renderer--background-for frame))
            (padding (agent-shell-math-renderer--padding-for inline))
            (image (latex-to-svg-backend doc :engine engine :fallback fallback
                                         :quiet quiet :rescale-by rescale
@@ -1037,9 +1116,8 @@ then re-renders)."
       ;; Record the appearance (colors + font height) this render is for,
       ;; so a later theme / frame / font change can detect the difference
       ;; and re-render (a color change re-tints; it no longer recompiles).
-      ;; Uses the same measured height so the signature matches the render.
       (setq agent-shell-math-renderer--rendered-appearance
-            (latex-to-svg-backend-appearance font-height))
+            (agent-shell-math-renderer--appearance buffer))
       (if image
           (agent-shell-math-renderer--overlay-image
            buffer start end image inline
@@ -1057,18 +1135,25 @@ then re-renders)."
            (lambda ()
              (when (buffer-live-p buffer)
                (with-current-buffer buffer
-                 ;; Re-measure: the buffer may be displayed now even if it
-                 ;; was not when the compile was scheduled.
-                 (agent-shell-math-renderer--overlay-image
-                  buffer s e
-                  (latex-to-svg-backend
-                   doc :engine engine :fallback fallback :quiet quiet
-                   :rescale-by rescale :color color
-                   :background background :padding padding
-                   :font-height (agent-shell-math-renderer--font-height buffer))
-                  inline
-                  (agent-shell-math-renderer--help-echo
-                   doc latex engine fallback)))))))))))
+                 ;; Read again: the buffer may be displayed now even if it
+                 ;; was not when the compile was scheduled, or on another
+                 ;; frame.
+                 (let ((frame (agent-shell-math-renderer--display-frame
+                               buffer)))
+                   (agent-shell-math-renderer--overlay-image
+                    buffer s e
+                    (latex-to-svg-backend
+                     doc :engine engine :fallback fallback :quiet quiet
+                     :rescale-by rescale
+                     :color (agent-shell-math-renderer--foreground-for frame)
+                     :background (agent-shell-math-renderer--background-for
+                                  frame)
+                     :padding padding
+                     :font-height (agent-shell-math-renderer--font-height
+                                   buffer))
+                    inline
+                    (agent-shell-math-renderer--help-echo
+                     doc latex engine fallback))))))))))))
 
 (defun agent-shell-math-renderer--refresh-buffer (buffer &optional recompile)
   "Re-render every display-math region in BUFFER for the current colors.
@@ -1241,11 +1326,10 @@ Acts only on the current buffer — the one the firing hook just made
 relevant (displayed, themed, or zoomed) — so making one chat visible
 never re-renders the others; each refreshes lazily when it is itself
 displayed.  The appearance signature folds in both colors and the
-buffer font height (see `latex-to-svg-backend-appearance'), so a font-size
-change is picked up just like a color change."
+buffer font height (see `agent-shell-math-renderer--appearance'), so a
+font-size change is picked up just like a color change."
   (when (and agent-shell-math-renderer--present
-             (not (equal (latex-to-svg-backend-appearance
-                          (agent-shell-math-renderer--font-height (current-buffer)))
+             (not (equal (agent-shell-math-renderer--appearance)
                          agent-shell-math-renderer--rendered-appearance)))
     (agent-shell-math-renderer-refresh (current-buffer))))
 

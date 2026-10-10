@@ -842,21 +842,50 @@ after text.
           (should (equal agent-shell-math-renderer--option-buffers
                          (list (current-buffer)))))))))
 
+(defconst agent-shell-math-renderer-tests--default-foreground "#cbe3e7"
+  "The foreground of the `default' face in the tests that stub it.")
+
+(defun agent-shell-math-renderer-tests--check-colors (keys)
+  "Signal an error unless KEYS meet `latex-to-svg-backend' 0.14.0.
+That is: `:color' and `:background' are nil or `#rrggbb' strings, and
+`:color' is non-nil whenever `:font-height' is."
+  (let ((hex "\\`#[[:xdigit:]]\\{6\\}\\'"))
+    (dolist (key '(:color :background))
+      (let ((value (plist-get keys key)))
+        (when (and value (not (and (stringp value) (string-match-p hex value))))
+          (error "%s is not a #rrggbb string: %S" key value))))
+    (when (and (plist-get keys :font-height) (not (plist-get keys :color)))
+      (error ":color is nil with :font-height %S" (plist-get keys :font-height)))))
+
 (defmacro agent-shell-math-renderer-tests--with-backend-calls (var &rest body)
   "Evaluate BODY with `latex-to-svg-backend' stubbed, recording into VAR.
 Each call pushes (LATEX . KEYS) onto VAR and returns nil, so every
-render takes the async path.  Nothing is overlaid, and the font height
-is fixed, so no graphical frame is needed."
+render takes the async path, and signals as the backend does when the
+colors break its contract (`agent-shell-math-renderer-tests--check-colors').
+Nothing is overlaid.  The buffer is shown on the selected frame, with
+a fixed font height and `default' foreground
+\(`agent-shell-math-renderer-tests--default-foreground'), so no
+graphical frame is needed."
   (declare (indent 1) (debug t))
-  `(let ((,var '()))
+  `(let ((,var '())
+         (face-foreground (symbol-function 'face-foreground)))
      (cl-letf (((symbol-function 'latex-to-svg-backend-available-p) #'always)
+               ((symbol-function 'agent-shell-math-renderer--display-frame)
+                (lambda (&rest _) (selected-frame)))
                ((symbol-function 'agent-shell-math-renderer--font-height)
                 (lambda (&rest _) 20))
-               ((symbol-function 'latex-to-svg-backend-appearance) #'ignore)
+               ((symbol-function 'face-foreground)
+                (lambda (face &rest args)
+                  (if (eq face 'default)
+                      agent-shell-math-renderer-tests--default-foreground
+                    (apply face-foreground face args))))
+               ((symbol-function 'agent-shell-math-renderer--appearance)
+                #'ignore)
                ((symbol-function 'agent-shell-math-renderer--overlay-image)
                 #'ignore)
                ((symbol-function 'latex-to-svg-backend)
                 (lambda (latex &rest keys)
+                  (agent-shell-math-renderer-tests--check-colors keys)
                   (push (cons latex keys) ,var)
                   nil)))
        ,@body)))
@@ -986,6 +1015,112 @@ is fixed, so no graphical frame is needed."
         (dolist (call calls)
           (should (eq quiet (plist-get (cdr call) :quiet))))))))
 
+(ert-deftest agent-shell-math-renderer-colors-are-hex-at-every-call ()
+  ;; `:color' is the option, or the `default' foreground on the frame that
+  ;; shows the buffer when the option is nil, and `:background' the option;
+  ;; each as `#rrggbb', a name resolved on that frame, at every call, the
+  ;; callback's included.
+  (dolist (case `((nil nil ,agent-shell-math-renderer-tests--default-foreground nil)
+                  ("#123456" nil "#123456" nil)
+                  ("orange" "gray97" "#ff8000" "#f7f7f7")))
+    (agent-shell-math-renderer-tests--with-backend-calls calls
+      (cl-letf (((symbol-function 'color-values)
+                 (lambda (color &rest _)
+                   (pcase color
+                     ("orange" '(65535 32896 0))
+                     ("gray97" '(63479 63479 63479))))))
+        (with-temp-buffer
+          (insert "xx")
+          (let ((agent-shell-math-renderer-foreground-color (nth 0 case))
+                (agent-shell-math-renderer-background-color (nth 1 case)))
+            (agent-shell-math-renderer--render
+             (current-buffer) (point-min) (point-max) "x" t)
+            (funcall (plist-get (cdar calls) :callback)))
+          (should (= 3 (length calls)))
+          (dolist (call calls)
+            (should (equal (nth 2 case) (plist-get (cdr call) :color)))
+            (should (equal (nth 3 case) (plist-get (cdr call) :background)))))))))
+
+(ert-deftest agent-shell-math-renderer-callback-reads-colors-again ()
+  ;; A buffer shown nowhere when the compile is scheduled gets no color and
+  ;; no height; shown when the compile ends, the callback reads both on the
+  ;; frame that shows it then, so the backend never sees a height without a
+  ;; color.
+  (agent-shell-math-renderer-tests--with-backend-calls calls
+    (let ((shown nil))
+      (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
+                 (lambda (&rest _) (and shown (selected-frame))))
+                ((symbol-function 'agent-shell-math-renderer--font-height)
+                 (lambda (&rest _) (and shown 20))))
+        (with-temp-buffer
+          (insert "xx")
+          (agent-shell-math-renderer--render
+           (current-buffer) (point-min) (point-max) "x")
+          (dolist (call calls)
+            (should-not (plist-get (cdr call) :color))
+            (should-not (plist-get (cdr call) :font-height)))
+          (setq shown t)
+          (funcall (plist-get (cdar calls) :callback))
+          (should (= 3 (length calls)))
+          (should (equal agent-shell-math-renderer-tests--default-foreground
+                         (plist-get (cdar calls) :color)))
+          (should (= 20 (plist-get (cdar calls) :font-height))))))))
+
+(ert-deftest agent-shell-math-renderer-unresolved-option-color-warns-once ()
+  ;; A name the frame cannot resolve is reported once and ignored: the
+  ;; equation takes the `default' foreground.
+  (agent-shell-math-renderer-tests--with-backend-calls calls
+    (let ((agent-shell-math-renderer--warned-colors nil)
+          (agent-shell-math-renderer-foreground-color "no-such-color")
+          (warnings 0))
+      (cl-letf (((symbol-function 'color-values) #'ignore)
+                ((symbol-function 'display-warning)
+                 (lambda (&rest _) (cl-incf warnings))))
+        (with-temp-buffer
+          (insert "xx")
+          (agent-shell-math-renderer--render
+           (current-buffer) (point-min) (point-max) "x")
+          (agent-shell-math-renderer--render
+           (current-buffer) (point-min) (point-max) "x")
+          (should (= 1 warnings))
+          (dolist (call calls)
+            (should (equal agent-shell-math-renderer-tests--default-foreground
+                           (plist-get (cdr call) :color)))))))))
+
+(ert-deftest agent-shell-math-renderer-hex-color-rounds ()
+  ;; `color-values' gives 16-bit components; each is rounded to 8 bits, so
+  ;; 32896 (128.0 of 255) is 80 and so is 32768 (127.5), which truncating
+  ;; would make 7f.  A `#rrggbb' string is returned as it is, and nil when
+  ;; the frame cannot resolve it.
+  (cl-letf (((symbol-function 'color-values)
+             (lambda (color &rest _)
+               (pcase color
+                 ("a" '(65535 32896 0))
+                 ("b" '(0 32768 257))))))
+    (should (equal "#ff8000" (agent-shell-math-renderer--hex-color "a" nil)))
+    (should (equal "#008001" (agent-shell-math-renderer--hex-color "b" nil)))
+    (should (equal "#AbCdEf" (agent-shell-math-renderer--hex-color "#AbCdEf" nil)))
+    (should-not (agent-shell-math-renderer--hex-color "c" nil))
+    (should-not (agent-shell-math-renderer--hex-color nil nil))))
+
+(ert-deftest agent-shell-math-renderer-appearance-reads-the-display-frame ()
+  ;; The signature is the `default' face's colors on the frame that shows the
+  ;; buffer, and the font height measured there; nil throughout when no
+  ;; graphical window shows it.
+  (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
+             #'ignore)
+            ((symbol-function 'agent-shell-math-renderer--font-height)
+             #'ignore))
+    (should (equal '(nil nil nil) (agent-shell-math-renderer--appearance))))
+  (cl-letf (((symbol-function 'agent-shell-math-renderer--display-frame)
+             (lambda (&rest _) (selected-frame)))
+            ((symbol-function 'agent-shell-math-renderer--font-height)
+             (lambda (&rest _) 20))
+            ((symbol-function 'face-foreground) (lambda (&rest _) "#111111"))
+            ((symbol-function 'face-background) (lambda (&rest _) "#eeeeee")))
+    (should (equal '("#111111" "#eeeeee" 20)
+                   (agent-shell-math-renderer--appearance)))))
+
 (ert-deftest agent-shell-math-renderer-help-echo-names-the-engine ()
   ;; Once the image is laid, the tooltip names the engine before the LaTeX,
   ;; and says so when the picture came from the fallback.  Compared after
@@ -1000,7 +1135,8 @@ is fixed, so no graphical frame is needed."
       (cl-letf (((symbol-function 'latex-to-svg-backend-available-p) #'always)
                 ((symbol-function 'agent-shell-math-renderer--font-height)
                  (lambda (&rest _) 20))
-                ((symbol-function 'latex-to-svg-backend-appearance) #'ignore)
+                ((symbol-function 'agent-shell-math-renderer--appearance)
+                 #'ignore)
                 ((symbol-function 'latex-to-svg-backend)
                  (lambda (&rest _) 'fake-image))
                 ((symbol-function 'latex-to-svg-backend-engine-used)

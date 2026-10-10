@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Requires `latex-to-svg-backend` 0.14.0, which reads no faces and no
+  frames. This package reads the colors on the frame that shows the buffer
+  and passes them to the backend as `#rrggbb` strings: the tint, when
+  `agent-shell-math-renderer-foreground-color` is nil, is the foreground of
+  the `default` face on that frame, and a name in
+  `agent-shell-math-renderer-foreground-color` or
+  `agent-shell-math-renderer-background-color` is resolved there. A name the
+  frame cannot resolve is reported with a warning and treated as nil.
+- When the compile of an equation ends, its tint is read again with its
+  font height, on the frame that shows the buffer then. Before, the tint
+  was the one read when the compile was scheduled.
+- The check for a theme or font change compares the colors of the
+  `default` face on the frame that shows the buffer, where it compared
+  those of the selected frame.
+- An equation in a buffer shown only on a terminal is compiled and cached,
+  and gets its image once a graphical frame shows the buffer. Before, the
+  backend compiled nothing while a terminal frame was selected, unless
+  `latex-to-svg-backend-render-on-non-graphic` was set; 0.14.0 removes that
+  option.
+
 ## [0.13.0] - 2026-10-09
 
 ### Added
