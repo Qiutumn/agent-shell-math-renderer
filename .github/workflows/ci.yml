@@ -1,12 +1,15 @@
-# Byte-compilation, checkdoc and the ERT suite, on every push to main and
-# every pull request.
+# Byte-compilation, checkdoc and the ERT suite, on every push to main or
+# develop and every pull request.
 #
 # The package `require's agent-shell, so loading it -- and thus the tests --
 # pulls the whole agent-shell stack (agent-shell itself plus shell-maker and
 # acp) and latex-to-svg-backend.  package.el installs them from MELPA, which
 # is where a user gets them too, so a dependency that changes under this
-# package shows up here rather than in a user's report.  Every later step
-# calls `package-initialize' to put them on the load-path.
+# package shows up here rather than in a user's report.  On develop, and on
+# a pull request from it, package.el installs latex-to-svg-backend from the
+# backend's own develop branch instead, which holds the backend that
+# develop here needs before MELPA has it.  Every later step calls
+# `package-initialize' to put them on the load-path.
 #
 # The suite needs no TeX toolchain, no graphical display and no Emacs built
 # with librsvg: nothing in it skips.
@@ -18,7 +21,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
 
 concurrency:
@@ -52,6 +55,7 @@ jobs:
       # with no MELPA package registered, so the installs below fail on an
       # otherwise healthy runner.  Fetch again rather than trust one request.
       - name: Install the dependencies from MELPA
+        if: github.ref_name != 'develop' && github.head_ref != 'develop'
         run: |
           for attempt in 1 2 3; do
             if emacs -Q -batch --eval '(progn
@@ -62,6 +66,34 @@ jobs:
               (package-refresh-contents)
               (package-install (quote agent-shell))
               (package-install (quote latex-to-svg-backend)))'; then
+              exit 0
+            fi
+            echo "MELPA fetch failed (attempt $attempt of 3); retrying in 15s"
+            sleep 15
+          done
+          exit 1
+
+      # The same, but with the backend from its develop branch.
+      # `package-install-file' on the checkout installs it as MELPA's
+      # package would be, under the version in its header.
+      - name: Install the dependencies, the backend from its develop branch
+        if: github.ref_name == 'develop' || github.head_ref == 'develop'
+        run: |
+          git clone --depth 1 -b develop \
+            https://github.com/alberti42/latex-to-svg-backend.git \
+            "$RUNNER_TEMP/latex-to-svg-backend"
+          for attempt in 1 2 3; do
+            if emacs -Q -batch --eval '(progn
+              (require (quote package))
+              (add-to-list (quote package-archives)
+                           (cons "melpa" "https://melpa.org/packages/") t)
+              (package-initialize)
+              (package-refresh-contents)
+              (package-install (quote agent-shell))
+              (package-install-file
+               (file-name-as-directory
+                (expand-file-name "latex-to-svg-backend"
+                                  (getenv "RUNNER_TEMP")))))'; then
               exit 0
             fi
             echo "MELPA fetch failed (attempt $attempt of 3); retrying in 15s"
@@ -106,8 +138,10 @@ jobs:
   # MELPA Stable (scripts/release-check.el): the renderer must require the
   # newest backend there, and CHANGELOG.md must have the version's dated
   # section.  After the tag exists, ordinary pushes skip it.  One Emacs is
-  # enough; the result does not depend on the Emacs version.
+  # enough; the result does not depend on the Emacs version.  Develop
+  # skips it: it may require a backend that MELPA Stable does not have yet.
   release-check:
+    if: github.ref_name != 'develop' && github.head_ref != 'develop'
     runs-on: ubuntu-latest
     name: Release check
     steps:
