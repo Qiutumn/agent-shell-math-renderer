@@ -353,6 +353,26 @@ it re-tints from cache (no recompile).  Setting it with `setq',
   :safe (lambda (v) (or (null v) (stringp v)))
   :group 'agent-shell-math-renderer)
 
+(defcustom agent-shell-math-renderer-foreground-ignored-faces nil
+  "Faces whose foreground the color of an equation does not follow.
+Each equation is tinted with the foreground of the text at its opening
+delimiter (see `agent-shell-math-renderer-foreground-color').  A face
+in this list is skipped when that foreground is read, and the next face
+of the text that specifies a foreground is used.  When no face is left,
+the equation is tinted with `agent-shell-math-renderer-foreground-color',
+or the foreground of the `default' face.  A face that inherits from a
+face in this list is not skipped.  The face `agent-shell-math-renderer',
+which every equation carries, is always skipped.
+
+With `agent-shell-markdown-header-1' (and the other levels) or
+`agent-shell-markdown-link' in this list, an equation in a heading or a
+link is drawn in the color of the text around it, not in the heading's
+or the link's.  Setting it with `setq', `setq-local' or Customize
+updates the equations on its own."
+  :type '(repeat face)
+  :safe (lambda (v) (and (listp v) (seq-every-p #'symbolp v)))
+  :group 'agent-shell-math-renderer)
+
 (defcustom agent-shell-math-renderer-background-color nil
   "Box color painted behind equations, or nil for transparent.
 
@@ -1117,10 +1137,12 @@ not a string, is nil too, and is reported once with `display-warning'."
 (defun agent-shell-math-renderer--text-foreground (pos &optional frame)
   "Return the foreground the faces of the text at POS give it, or nil.
 Follows `foreground-color-at-point' (see `faces--attribute-at-point'),
-with four differences.  It reads text properties only, not overlays.
+with five differences.  It reads text properties only, not overlays.
 It reads the faces on FRAME (nil: the selected frame).  It skips the
 face `agent-shell-math-renderer', which this package puts on every
-equation, so the face of the text around the equation decides.  When
+equation, so the face of the text around the equation decides.  It
+skips the faces in
+`agent-shell-math-renderer-foreground-ignored-faces'.  When
 no other face at POS specifies a foreground, it returns nil, not the
 foreground of the `default' face.
 
@@ -1130,8 +1152,9 @@ faces (the first that specifies a foreground wins), or an anonymous
 face such as (:foreground \"gold\") or (foreground-color . \"gold\").
 
 It is a copy of the latex-to-svg front-end's function of the same
-name, but for the skipped face; `scripts/emacs-faces-check.el' watches
-the two Emacs functions it follows."
+name, but for the face `agent-shell-math-renderer';
+`scripts/emacs-faces-check.el' watches the two Emacs functions it
+follows."
   (let ((faces (or (and font-lock-mode
                         (get-text-property pos 'font-lock-face))
                    (get-text-property pos 'face)))
@@ -1139,6 +1162,7 @@ the two Emacs functions it follows."
     (dolist (face (if (face-list-p faces) faces (list faces)))
       (cond (found)
             ((eq face 'agent-shell-math-renderer))
+            ((memq face agent-shell-math-renderer-foreground-ignored-faces))
             ((and face (symbolp face))
              (let ((value (face-attribute-specified-or
                            (face-attribute face :foreground frame t)
@@ -1414,6 +1438,7 @@ fast and untouched buffers refresh lazily when next displayed."
   '(agent-shell-math-renderer-engine
     agent-shell-math-renderer-fallback
     agent-shell-math-renderer-foreground-color
+    agent-shell-math-renderer-foreground-ignored-faces
     agent-shell-math-renderer-background-color
     agent-shell-math-renderer-padding
     agent-shell-math-renderer-padding-inline

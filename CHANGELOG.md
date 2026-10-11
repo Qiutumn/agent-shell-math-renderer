@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   color and the size of that text. The color is read again at every
   refresh, so a theme change re-tints them. Equations in plain text look
   as before.
+- `agent-shell-math-renderer-foreground-ignored-faces`: faces whose
+  foreground the color of an equation does not follow. The next face of
+  the text at the opening delimiter that specifies a foreground is used,
+  else `agent-shell-math-renderer-foreground-color`. With
+  `agent-shell-markdown-header-1` or `agent-shell-markdown-link` in it, an
+  equation in a heading or a link keeps the color of the text around it.
 
 ### Changed
 

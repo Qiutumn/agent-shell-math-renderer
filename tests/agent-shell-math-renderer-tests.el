@@ -1318,6 +1318,28 @@ graphical frame is needed."
       (should (equal (cdr case)
                      (agent-shell-math-renderer--text-foreground 1))))))
 
+(ert-deftest agent-shell-math-renderer-text-foreground-skips-ignored-faces ()
+  ;; A face in `-foreground-ignored-faces' is skipped and the next face with
+  ;; a foreground is read; with none left, nil.  A face that inherits from an
+  ;; ignored face is not skipped.  The option is watched, like the other
+  ;; appearance options.
+  (with-temp-buffer
+    (insert "\\(a\\) \\(b\\) \\(c\\)")
+    (put-text-property 1 2 'face '(agent-shell-math-renderer-tests--gold
+                                   (:foreground "red")))
+    (put-text-property 7 8 'face 'agent-shell-math-renderer-tests--gold)
+    (put-text-property 13 14 'face 'agent-shell-math-renderer-tests--inherits-gold)
+    (let ((agent-shell-math-renderer-foreground-ignored-faces nil))
+      (should (equal (agent-shell-math-renderer--text-foreground 1) "gold"))
+      (should (equal (agent-shell-math-renderer--text-foreground 7) "gold")))
+    (let ((agent-shell-math-renderer-foreground-ignored-faces
+           '(agent-shell-math-renderer-tests--gold)))
+      (should (equal (agent-shell-math-renderer--text-foreground 1) "red"))
+      (should-not (agent-shell-math-renderer--text-foreground 7))
+      (should (equal (agent-shell-math-renderer--text-foreground 13) "gold"))))
+  (should (memq 'agent-shell-math-renderer-foreground-ignored-faces
+                agent-shell-math-renderer--watched-options)))
+
 (defconst agent-shell-math-renderer-tests--colors
   '(("gold" 65535 55255 0)
     ("red" 65535 0 0)
