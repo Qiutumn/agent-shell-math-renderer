@@ -41,7 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `default` face on that frame, and a name in
   `agent-shell-math-renderer-foreground-color` or
   `agent-shell-math-renderer-background-color` is resolved there. A name the
-  frame cannot resolve is reported with a warning and treated as nil.
+  frame cannot resolve, or a value that is not a string, is reported with
+  a warning and treated as nil.
 - When the compile of an equation ends, its tint is read again with its
   font height, on the frame that shows the buffer then. Before, the tint
   was the one read when the compile was scheduled.

@@ -342,7 +342,8 @@ color instead, if it is non-nil: a `#rrggbb' string or any name
 default) leaves those equations in the foreground of the `default'
 face, which tracks the theme.
 Colors are read on the frame that shows the buffer, and a name that
-frame cannot resolve is reported with a warning and treated as nil.
+frame cannot resolve, or a value that is not a string, is reported
+with a warning and treated as nil.
 
 Passed to `latex-to-svg-backend' as `:color', as a `#rrggbb' string;
 it re-tints from cache (no recompile).  Setting it with `setq',
@@ -361,7 +362,8 @@ the buffer.  Set to a color — a `#rrggbb' string or any name
 paint that color behind every equation.  A very light gray reads
 best; keep it subtle so it doesn't fight the buffer background.  The
 color is read on the frame that shows the buffer, and a name that
-frame cannot resolve is reported with a warning and treated as nil.
+frame cannot resolve, or a value that is not a string, is reported
+with a warning and treated as nil.
 
 Passed to `latex-to-svg-backend' as `:background', as a `#rrggbb'
 string; it applies from cache (no recompile).  Setting it with
@@ -1097,10 +1099,11 @@ when COLOR is nil or FRAME cannot resolve it."
 
 (defun agent-shell-math-renderer--option-color (option frame)
   "Return the color in OPTION as a `#rrggbb' string resolved on FRAME, or nil.
-Nil when OPTION is nil.  A value FRAME cannot resolve is nil too, and
-is reported once with `display-warning'."
+Nil when OPTION is nil.  A value FRAME cannot resolve, or one that is
+not a string, is nil too, and is reported once with `display-warning'."
   (when-let* ((color (symbol-value option)))
-    (or (agent-shell-math-renderer--hex-color color frame)
+    (or (and (stringp color)
+             (agent-shell-math-renderer--hex-color color frame))
         (let ((pair (cons option color)))
           (unless (member pair agent-shell-math-renderer--warned-colors)
             (push pair agent-shell-math-renderer--warned-colors)

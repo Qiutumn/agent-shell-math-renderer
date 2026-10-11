@@ -1377,6 +1377,26 @@ strings, and the buffer font has an x-height of 18."
           (should (equal (agent-shell-math-renderer--foreground-for 13 frame)
                          "#123456")))))))
 
+(ert-deftest agent-shell-math-renderer-option-color-not-a-string-warns-once ()
+  ;; A value that is not a string, such as the symbol `black', is reported
+  ;; once and treated as nil, like a name the frame cannot resolve; it does
+  ;; not signal, which would stop every equation from being drawn.
+  (agent-shell-math-renderer-tests--with-frame
+    (let ((agent-shell-math-renderer--warned-colors nil)
+          (agent-shell-math-renderer-foreground-color 'black)
+          (agent-shell-math-renderer-background-color 'white)
+          (warnings nil)
+          (frame (selected-frame)))
+      (cl-letf (((symbol-function 'display-warning)
+                 (lambda (_type message &rest _) (push message warnings))))
+        (with-temp-buffer
+          (insert "\\(a\\)")
+          (dotimes (_ 2)
+            (should (equal (agent-shell-math-renderer--foreground-for 1 frame)
+                           "#ffffff"))
+            (should-not (agent-shell-math-renderer--background-for frame)))))
+      (should (= (length warnings) 2)))))
+
 (ert-deftest agent-shell-math-renderer-render-is-deferred ()
   ;; Every equation, inline or display, is tagged and rendered from one
   ;; timer, after agent-shell's passes, in its own style.  Two adjacent
