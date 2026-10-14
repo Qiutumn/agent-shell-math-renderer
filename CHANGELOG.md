@@ -11,9 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Requires latex-to-svg-backend 0.15.0 or newer, whose callback receives
-  the outcome of the request. When the request ends without a picture,
-  the source stays as it is in the buffer, as before.
+- Requires latex-to-svg-backend 0.15.0 or newer. That backend reports to
+  this package whether a compile succeeded or failed;
+  agent-shell-math-renderer 0.13.1 and earlier signal
+  `wrong-number-of-arguments` on that report and show no image after any
+  compile. A package that brings in backend 0.15.0, such as latex-to-svg
+  0.22.0, needs this release alongside it.
+- An equation that fails to compile stays as source in the buffer, as in
+  0.13.1. The error is not shown yet.
 
 ## [0.13.1] - 2026-10-14
 
