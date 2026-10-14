@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Requires latex-to-svg-backend 0.15.0 or newer, whose callback receives
+  the outcome of the request. When the request ends without a picture,
+  the source stays as it is in the buffer, as before.
+
 ## [0.13.1] - 2026-10-14
 
 ### Changed

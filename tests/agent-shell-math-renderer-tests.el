@@ -1020,7 +1020,7 @@ graphical frame is needed."
         (should (= 2 (length calls)))
         (let ((callback (plist-get (cdar calls) :callback))
               (agent-shell-math-renderer-engine 'latex))
-          (funcall callback))
+          (funcall callback nil))
         (should (= 3 (length calls)))
         (dolist (call calls)
           (should (eq engine (plist-get (cdr call) :engine))))))))
@@ -1053,7 +1053,7 @@ graphical frame is needed."
          (current-buffer) (point-min) (point-max) "x"))
       (let ((callback (plist-get (cdar calls) :callback))
             (agent-shell-math-renderer-fallback nil))
-        (funcall callback))
+        (funcall callback nil))
       (should (= 3 (length calls)))
       (should (eq 'latex (plist-get (cdar calls) :fallback))))))
 
@@ -1068,7 +1068,7 @@ graphical frame is needed."
         (let ((agent-shell-math-renderer-quiet quiet))
           (agent-shell-math-renderer--render
            (current-buffer) (point-min) (point-max) "x"))
-        (funcall (plist-get (cdar calls) :callback))
+        (funcall (plist-get (cdar calls) :callback) nil)
         (should (= 3 (length calls)))
         (dolist (call calls)
           (should (eq quiet (plist-get (cdr call) :quiet))))))))
@@ -1093,7 +1093,7 @@ graphical frame is needed."
                 (agent-shell-math-renderer-background-color (nth 1 case)))
             (agent-shell-math-renderer--render
              (current-buffer) (point-min) (point-max) "x" t)
-            (funcall (plist-get (cdar calls) :callback)))
+            (funcall (plist-get (cdar calls) :callback) nil))
           (should (= 3 (length calls)))
           (dolist (call calls)
             (should (equal (nth 2 case) (plist-get (cdr call) :color)))
@@ -1118,7 +1118,7 @@ graphical frame is needed."
             (should-not (plist-get (cdr call) :color))
             (should-not (plist-get (cdr call) :x-height)))
           (setq shown t)
-          (funcall (plist-get (cdar calls) :callback))
+          (funcall (plist-get (cdar calls) :callback) nil)
           (should (= 3 (length calls)))
           (should (equal agent-shell-math-renderer-tests--default-foreground
                          (plist-get (cdar calls) :color)))
@@ -1497,7 +1497,7 @@ strings, and the buffer font has an x-height of 18."
             (agent-shell-markdown-replace-markup)
             (agent-shell-math-renderer--render-deferred (current-buffer))
             (setq ready t)
-            (mapc #'funcall callbacks)
+            (dolist (callback callbacks) (funcall callback nil))
             (goto-char (point-min))
             (search-forward "\\(")
             (should (eq 'image (car-safe (get-text-property

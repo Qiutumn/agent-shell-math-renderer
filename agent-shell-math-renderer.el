@@ -7,7 +7,7 @@
 ;; Assisted-by: Claude:claude-opus-4-8
 ;; URL: https://github.com/alberti42/agent-shell-math-renderer
 ;; Version: 0.13.1
-;; Package-Requires: ((emacs "29.1") (agent-shell "0.67.1") (latex-to-svg-backend "0.14.0"))
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.67.1") (latex-to-svg-backend "0.15.0"))
 ;; Keywords: tex, llm, math, education
 
 ;; This package is free software; you can redistribute it and/or modify
@@ -1295,7 +1295,8 @@ BUFFER is shown in no graphical window, all three are nil: the backend
 compiles the SVG and returns no image, and the display hook re-renders
 once the buffer is shown, from the cache.  The callback of an
 async compile reads all three again, on the frame that shows BUFFER
-then."
+then.  When the request ends without a picture, the callback leaves
+the source as it is."
   (let ((frame (agent-shell-math-renderer--display-frame buffer)))
     (cond
      ((not (agent-shell-math-renderer--graphical-p))
@@ -1340,8 +1341,10 @@ then."
              :rescale-by rescale :color color
              :background background :padding padding :x-height x-height
              :callback
-             (lambda ()
-               (when (buffer-live-p buffer)
+             (lambda (outcome)
+               ;; OUTCOME non-nil: the request ended without a picture, and
+               ;; the source stays as it is.
+               (when (and (null outcome) (buffer-live-p buffer))
                  (with-current-buffer buffer
                    ;; Read again: the buffer may be displayed now even if it
                    ;; was not when the compile was scheduled, or on another
