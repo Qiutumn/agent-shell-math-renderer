@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-14
+
+### Changed
+
+- Requires agent-shell 0.67.1 or newer, the first release that emits
+  `session-restored`.
+
 ### Fixed
 
 - With `agent-shell-math-renderer-render-submitted-prompts` on, the user
@@ -14,11 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them without running its markdown renderer and without emitting
   `input-submitted`, so they stayed raw LaTeX. They are rendered when
   agent-shell emits `session-restored`.
-
-### Changed
-
-- Requires agent-shell 0.67.1 or newer, the first release that emits
-  `session-restored`.
 
 ## [0.13.0] - 2026-10-10
 
@@ -539,7 +541,8 @@ Initial release.
   `agent-shell-markdown-render-functions` hook and public range/cache helpers;
   require agent-shell 0.57.4 for `:inline-code-ranges`.
 
-[Unreleased]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/alberti42/agent-shell-math-renderer/compare/v0.10.0...v0.11.0
