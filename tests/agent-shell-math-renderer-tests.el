@@ -1124,6 +1124,23 @@ graphical frame is needed."
                          (plist-get (cdar calls) :color)))
           (should (= 20 (plist-get (cdar calls) :x-height))))))))
 
+(ert-deftest agent-shell-math-renderer-failure-leaves-source ()
+  ;; A callback called with a failure plist does not call the backend
+  ;; again, and leaves the source in the buffer with no image over it.
+  (agent-shell-math-renderer-tests--with-backend-calls calls
+    (with-temp-buffer
+      (insert "\\(\\notacommand\\)")
+      (agent-shell-math-renderer--render
+       (current-buffer) (point-min) (point-max) "\\notacommand" t)
+      (should (= 2 (length calls)))
+      (funcall (plist-get (cdar calls) :callback)
+               '(:kind formula :engine latex
+                 :message "Undefined control sequence." :line 1 :column 13
+                 :log nil :program nil))
+      (should (= 2 (length calls)))
+      (should (equal "\\(\\notacommand\\)" (buffer-string)))
+      (should-not (get-text-property (point-min) 'display)))))
+
 (ert-deftest agent-shell-math-renderer-no-render-without-graphical-frame ()
   ;; With no graphical frame the backend is not called and the signature is
   ;; cleared, so the display hook renders the buffer once a graphical window
