@@ -7,7 +7,7 @@
 ;; Assisted-by: Claude:claude-opus-4-8
 ;; URL: https://github.com/alberti42/agent-shell-math-renderer
 ;; Version: 0.13.0
-;; Package-Requires: ((emacs "29.1") (agent-shell "0.66.1") (latex-to-svg-backend "0.14.0"))
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.67.1") (latex-to-svg-backend "0.14.0"))
 ;; Keywords: tex, llm, math, education
 
 ;; This package is free software; you can redistribute it and/or modify
@@ -56,6 +56,7 @@
 ;; When `agent-shell-math-renderer-render-submitted-prompts' is non-nil,
 ;; submitted prompts are rendered after they are sent, using the same
 ;; delimiter, inline-math, and fenced-math handling as agent responses.
+;; The prompts a restored session replays are rendered the same way.
 ;; This path obtains the same markdown context through agent-shell's
 ;; public `agent-shell-markdown-context', so it stays in sync with the
 ;; streaming render hook and uses no private agent-shell API.
@@ -489,7 +490,10 @@ according to `agent-shell-math-renderer-render-inline'.
 This uses agent-shell's existing `input-submitted' event and
 shell-maker/comint's `comint-last-input-start' /
 `comint-last-input-end' markers to find the prompt that was just
-submitted.  Rendering is deferred out of the submit command."
+submitted.  Rendering is deferred out of the submit command.
+
+The prompts a restored session replays are rendered too, when
+agent-shell emits `session-restored'."
   :type 'boolean
   :safe #'booleanp
   :group 'agent-shell-math-renderer)
@@ -508,8 +512,8 @@ an equation renders.")
   "Non-nil in a buffer that has rendered display-math regions.
 Lets `agent-shell-math-renderer-refresh' visit only relevant buffers.")
 
-(defvar-local agent-shell-math-renderer--prompt-subscription nil
-  "Subscription token for submitted-prompt rendering in this buffer.")
+(defvar-local agent-shell-math-renderer--prompt-subscriptions nil
+  "Subscription tokens for submitted-prompt rendering in this buffer.")
 
 (defun agent-shell-math-renderer--delimiter-flush-p (start end)
   "Return non-nil if the delimiter spanning START..END is flush on its line.
@@ -1846,22 +1850,62 @@ package's architecture notes for the full history."
   "Render the current buffer's submitted prompt after submit returns."
   (agent-shell-math-renderer--schedule-submitted-prompt (current-buffer)))
 
+(defun agent-shell-math-renderer--replayed-prompt-regions ()
+  "Return markers around each user prompt a session restore replayed.
+A replayed prompt is the text `agent-shell-ui-update-text' inserted for
+a `user_message_chunk', less the shell prompt before it, which carries
+`field' `output'."
+  (save-excursion
+    (save-restriction
+      (widen)
+      (goto-char (point-min))
+      (let ((regions '()))
+        (while-let ((match (text-property-search-forward
+                            'agent-shell-ui-state nil
+                            (lambda (_ state)
+                              (string-suffix-p
+                               "user_message_chunk"
+                               (or (map-elt state :qualified-id) "")))
+                            t)))
+          (when-let* ((end (prop-match-end match))
+                      (start (text-property-not-all
+                              (prop-match-beginning match) end
+                              'field 'output)))
+            (push (cons (copy-marker start) (copy-marker end)) regions)))
+        (nreverse regions)))))
+
+(defun agent-shell-math-renderer--on-session-restored (_event)
+  "Render the prompts a session restore replayed in the current buffer.
+agent-shell inserts them without running its markdown renderer and
+without emitting `input-submitted'."
+  (when (and agent-shell-math-renderer-render-submitted-prompts
+             (agent-shell-math-renderer--active-p))
+    (dolist (region (agent-shell-math-renderer--replayed-prompt-regions))
+      (run-at-time 0 nil
+                   #'agent-shell-math-renderer--render-submitted-prompt
+                   (current-buffer) (car region) (cdr region)))))
+
 (defun agent-shell-math-renderer--maybe-subscribe-prompts ()
   "Subscribe current `agent-shell' buffer to submitted-prompt rendering."
-  (unless agent-shell-math-renderer--prompt-subscription
-    (setq-local agent-shell-math-renderer--prompt-subscription
-                (agent-shell-subscribe-to
-                 :shell-buffer (current-buffer)
-                 :event 'input-submitted
-                 :on-event
-                 #'agent-shell-math-renderer--on-input-submitted))))
+  (unless agent-shell-math-renderer--prompt-subscriptions
+    (setq-local agent-shell-math-renderer--prompt-subscriptions
+                (list
+                 (agent-shell-subscribe-to
+                  :shell-buffer (current-buffer)
+                  :event 'input-submitted
+                  :on-event
+                  #'agent-shell-math-renderer--on-input-submitted)
+                 (agent-shell-subscribe-to
+                  :shell-buffer (current-buffer)
+                  :event 'session-restored
+                  :on-event
+                  #'agent-shell-math-renderer--on-session-restored)))))
 
 (defun agent-shell-math-renderer--unsubscribe-prompts ()
   "Unsubscribe the current buffer from submitted-prompt rendering."
-  (when agent-shell-math-renderer--prompt-subscription
-    (agent-shell-unsubscribe
-     :subscription agent-shell-math-renderer--prompt-subscription)
-    (setq-local agent-shell-math-renderer--prompt-subscription nil)))
+  (dolist (subscription agent-shell-math-renderer--prompt-subscriptions)
+    (agent-shell-unsubscribe :subscription subscription))
+  (setq-local agent-shell-math-renderer--prompt-subscriptions nil))
 
 ;;;###autoload
 (define-minor-mode agent-shell-math-renderer-mode

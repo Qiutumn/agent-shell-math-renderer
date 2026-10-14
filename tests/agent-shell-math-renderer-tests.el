@@ -1849,15 +1849,22 @@ strings, and the buffer font has an x-height of 18."
     (with-temp-buffer
       (cl-letf (((symbol-function 'agent-shell-subscribe-to)
                  (lambda (&rest plist)
-                   (setq args plist)
+                   (setq args (append args (list plist)))
                    'fake-subscription)))
         (agent-shell-math-renderer--maybe-subscribe-prompts))
-      (should (eq agent-shell-math-renderer--prompt-subscription
-                  'fake-subscription))
-      (should (eq (plist-get args :shell-buffer) (current-buffer)))
-      (should (eq (plist-get args :event) 'input-submitted))
-      (should (eq (plist-get args :on-event)
-                  #'agent-shell-math-renderer--on-input-submitted)))))
+      (should (equal agent-shell-math-renderer--prompt-subscriptions
+                     '(fake-subscription fake-subscription)))
+      (should (equal (seq-map (lambda (plist) (plist-get plist :shell-buffer))
+                              args)
+                     (list (current-buffer) (current-buffer))))
+      (should (equal (seq-map (lambda (plist)
+                                (list (plist-get plist :event)
+                                      (plist-get plist :on-event)))
+                              args)
+                     '((input-submitted
+                        agent-shell-math-renderer--on-input-submitted)
+                       (session-restored
+                        agent-shell-math-renderer--on-session-restored)))))))
 
 (ert-deftest agent-shell-math-renderer-input-submitted-handler-uses-current-buffer ()
   ;; The event handler keeps agent-shell's ordinary one-argument callback shape,
@@ -1942,6 +1949,59 @@ strings, and the buffer font has an x-height of 18."
                         (point)
                         'agent-shell-math-renderer-source)
                        "E=mc^2"))))))
+
+(ert-deftest agent-shell-math-renderer-session-restored-renders-replayed-prompts ()
+  ;; A restore replays each user prompt as a `user_message_chunk', inserted
+  ;; by `agent-shell-ui-update-text' with no markdown render and no
+  ;; `input-submitted'.  `session-restored' renders those prompts, without
+  ;; the shell prompt before them and without the agent's text.
+  (agent-shell-math-renderer-tests--enabled
+    (with-temp-buffer
+      (insert (propertize "Claude> " 'field 'output
+                          'agent-shell-ui-state
+                          '((:qualified-id . "1-1-user_message_chunk")))
+              (propertize "\\[\nx^2\n\\]\nand \\(y\\)"
+                          'agent-shell-ui-state
+                          '((:qualified-id . "1-1-user_message_chunk")))
+              "\n\nagent \\(z\\)\n\n")
+      (let ((agent-shell-math-renderer-render-submitted-prompts t)
+            scheduled)
+        (cl-letf (((symbol-function 'run-at-time)
+                   (lambda (_time _repeat function &rest args)
+                     (push (cons function args) scheduled))))
+          (agent-shell-math-renderer--on-session-restored
+           '((:event . session-restored))))
+        (should (= (length scheduled) 1))
+        (apply (car (car scheduled)) (cdr (car scheduled)))
+        (goto-char (point-min))
+        (should-not (get-text-property (point)
+                                       'agent-shell-math-renderer-source))
+        (search-forward "\\[")
+        (should (equal (get-text-property (match-beginning 0)
+                                          'agent-shell-math-renderer-source)
+                       "x^2"))
+        (search-forward "\\(y")
+        (should (equal (get-text-property (match-beginning 0)
+                                          'agent-shell-math-renderer-source)
+                       "y"))
+        (search-forward "\\(z")
+        (should-not (get-text-property (match-beginning 0)
+                                       'agent-shell-math-renderer-source))))))
+
+(ert-deftest agent-shell-math-renderer-session-restored-respects-option ()
+  (agent-shell-math-renderer-tests--enabled
+    (with-temp-buffer
+      (insert (propertize "\\(y\\)"
+                          'agent-shell-ui-state
+                          '((:qualified-id . "1-1-user_message_chunk"))))
+      (let ((agent-shell-math-renderer-render-submitted-prompts nil)
+            scheduled)
+        (cl-letf (((symbol-function 'run-at-time)
+                   (lambda (&rest _)
+                     (setq scheduled t))))
+          (agent-shell-math-renderer--on-session-restored
+           '((:event . session-restored))))
+        (should-not scheduled)))))
 
 (provide 'agent-shell-math-renderer-tests)
 

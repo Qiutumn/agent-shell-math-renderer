@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- With `agent-shell-math-renderer-render-submitted-prompts` on, the user
+  prompts of a restored session are rendered too. agent-shell replays
+  them without running its markdown renderer and without emitting
+  `input-submitted`, so they stayed raw LaTeX. They are rendered when
+  agent-shell emits `session-restored`.
+
+### Changed
+
+- Requires agent-shell 0.67.1 or newer, the first release that emits
+  `session-restored`.
+
 ## [0.13.0] - 2026-10-10
 
 ### Added

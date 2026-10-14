@@ -73,9 +73,10 @@ inline equation in a heading has the heading's color and size.
 ## Requirements
 
 - **Emacs 29.1+**
-- **[`agent-shell`](https://github.com/xenodium/agent-shell)** (0.66.1 or newer —
-  the release with the backslash-escape pass and the right-label render-function
-  suppression the hook relies on)
+- **[`agent-shell`](https://github.com/xenodium/agent-shell)** (0.67.1 or newer —
+  the release with the backslash-escape pass, the right-label render-function
+  suppression the hook relies on, and the `session-restored` event that renders
+  the prompts of a restored session)
 - **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.14.0
   or newer (the release that reads no faces and no frames: this package
   passes the tint and the x-height it reads on the frame that shows the
