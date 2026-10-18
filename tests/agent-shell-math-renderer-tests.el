@@ -1355,12 +1355,11 @@ which binds CALLS), and its callback called with
          (current-buffer) (point-min) (point-max) "x")
         (should (= 2 (length calls)))))))
 
-(ert-deftest agent-shell-math-renderer-unresolved-option-color-warns-once ()
-  ;; A name the frame cannot resolve is reported once and ignored: the
+(ert-deftest agent-shell-math-renderer-unresolved-option-color-is-ignored ()
+  ;; A name the frame cannot resolve is ignored with no warning: the
   ;; equation takes the `default' foreground.
   (agent-shell-math-renderer-tests--with-backend-calls calls
-    (let ((agent-shell-math-renderer--warned-colors nil)
-          (agent-shell-math-renderer-foreground-color "no-such-color")
+    (let ((agent-shell-math-renderer-foreground-color "no-such-color")
           (warnings 0))
       (cl-letf (((symbol-function 'color-values) #'ignore)
                 ((symbol-function 'display-warning)
@@ -1369,9 +1368,7 @@ which binds CALLS), and its callback called with
           (insert "xx")
           (agent-shell-math-renderer--render
            (current-buffer) (point-min) (point-max) "x")
-          (agent-shell-math-renderer--render
-           (current-buffer) (point-min) (point-max) "x")
-          (should (= 1 warnings))
+          (should (= 0 warnings))
           (dolist (call calls)
             (should (equal agent-shell-math-renderer-tests--default-foreground
                            (plist-get (cdr call) :color)))))))))
@@ -1546,13 +1543,12 @@ strings, and the buffer font has an x-height of 18."
           (should (equal (agent-shell-math-renderer--foreground-for 13 frame)
                          "#123456")))))))
 
-(ert-deftest agent-shell-math-renderer-option-color-not-a-string-warns-once ()
-  ;; A value that is not a string, such as the symbol `black', is reported
-  ;; once and treated as nil, like a name the frame cannot resolve; it does
+(ert-deftest agent-shell-math-renderer-option-color-not-a-string-is-ignored ()
+  ;; A value that is not a string, such as the symbol `black', is treated
+  ;; as nil with no warning, like a name the frame cannot resolve; it does
   ;; not signal, which would stop every equation from being drawn.
   (agent-shell-math-renderer-tests--with-frame
-    (let ((agent-shell-math-renderer--warned-colors nil)
-          (agent-shell-math-renderer-foreground-color 'black)
+    (let ((agent-shell-math-renderer-foreground-color 'black)
           (agent-shell-math-renderer-background-color 'white)
           (warnings nil)
           (frame (selected-frame)))
@@ -1560,11 +1556,64 @@ strings, and the buffer font has an x-height of 18."
                  (lambda (_type message &rest _) (push message warnings))))
         (with-temp-buffer
           (insert "\\(a\\)")
-          (dotimes (_ 2)
-            (should (equal (agent-shell-math-renderer--foreground-for 1 frame)
-                           "#ffffff"))
-            (should-not (agent-shell-math-renderer--background-for frame)))))
-      (should (= (length warnings) 2)))))
+          (should (equal (agent-shell-math-renderer--foreground-for 1 frame)
+                         "#ffffff"))
+          (should-not (agent-shell-math-renderer--background-for frame))))
+      (should-not warnings))))
+
+(ert-deftest agent-shell-math-renderer-mode-checks-color-options ()
+  ;; The mode warns about each color option that is not a color, each time
+  ;; it turns on, and again in each buffer updated after an option is set.
+  ;; A good value, or nil, gives no warning; with no graphical frame it
+  ;; checks nothing.  The subscription is stubbed so a plain buffer
+  ;; suffices.
+  (let ((warnings nil))
+    (cl-letf (((symbol-function 'display-warning)
+               (lambda (_type message &rest _) (push message warnings)))
+              ((symbol-function 'agent-shell-subscribe-to)
+               (lambda (&rest _) 'token))
+              ((symbol-function 'agent-shell-unsubscribe)
+               (lambda (&rest _) nil)))
+      (agent-shell-math-renderer-tests--with-frame
+        (let ((agent-shell-math-renderer-foreground-color "no-such-color")
+              (agent-shell-math-renderer-background-color 'white))
+          (with-temp-buffer
+            (agent-shell-math-renderer-mode 1)
+            (should (= (length warnings) 2))
+            (should (seq-some
+                     (lambda (w)
+                       (string-match-p
+                        "`agent-shell-math-renderer-foreground-color' is \"no-such-color\""
+                        w))
+                     warnings))
+            (agent-shell-math-renderer-mode -1)
+            (agent-shell-math-renderer-mode 1)
+            (should (= (length warnings) 4))
+            (setq warnings nil)
+            (setq-local agent-shell-math-renderer--present t)
+            (cl-letf (((symbol-function 'agent-shell-math-renderer--refresh-buffer)
+                       #'ignore))
+              (unwind-protect
+                  (progn
+                    (setq-local agent-shell-math-renderer-foreground-color "red")
+                    (agent-shell-math-renderer--update-after-option))
+                (when (timerp agent-shell-math-renderer--option-timer)
+                  (cancel-timer agent-shell-math-renderer--option-timer))
+                (setq agent-shell-math-renderer--option-timer nil
+                      agent-shell-math-renderer--option-buffers nil
+                      agent-shell-math-renderer--option-defaults nil)))
+            (should (= (length warnings) 1))
+            (should (string-match-p "background-color" (car warnings)))))
+        (setq warnings nil)
+        (let ((agent-shell-math-renderer-foreground-color "red")
+              (agent-shell-math-renderer-background-color nil))
+          (with-temp-buffer
+            (agent-shell-math-renderer-mode 1)
+            (should-not warnings))))
+      (let ((agent-shell-math-renderer-foreground-color "no-such-color"))
+        (with-temp-buffer
+          (agent-shell-math-renderer-mode 1)
+          (should-not warnings))))))
 
 (ert-deftest agent-shell-math-renderer-render-is-deferred ()
   ;; Every equation, inline or display, is tagged and rendered from one

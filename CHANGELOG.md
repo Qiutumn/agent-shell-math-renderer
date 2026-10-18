@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   equation at point, or shows the error in the echo area when there is no
   log. The tooltip of a failed equation names it.
 
+### Changed
+
+- A color option (`agent-shell-math-renderer-foreground-color`,
+  `agent-shell-math-renderer-background-color`) whose value is not a color
+  is reported when `agent-shell-math-renderer-mode` turns on and when an
+  option of this package is set, in each buffer with equations, instead of
+  once for the life of the Emacs process, when an equation was first
+  drawn. Drawing an equation ignores such a value with no warning, as it
+  ignored it before after the first warning.
+
 ## [0.14.0] - 2026-10-14
 
 ### Changed

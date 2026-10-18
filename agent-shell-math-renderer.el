@@ -1231,25 +1231,40 @@ when COLOR is nil or FRAME cannot resolve it."
            (apply #'format "#%02x%02x%02x"
                   (mapcar (lambda (v) (round (* v 255) 65535)) values))))))
 
-(defvar agent-shell-math-renderer--warned-colors nil
-  "The (OPTION . VALUE) pairs reported as colors no frame resolved.")
-
 (defun agent-shell-math-renderer--option-color (option frame)
   "Return the color in OPTION as a `#rrggbb' string resolved on FRAME, or nil.
 Nil when OPTION is nil.  A value FRAME cannot resolve, or one that is
-not a string, is nil too, and is reported once with `display-warning'."
+not a string, is nil too, with no warning: this runs for every
+equation drawn.  `agent-shell-math-renderer--check-options' reports
+such a value when the mode turns on."
   (when-let* ((color (symbol-value option)))
-    (or (and (stringp color)
-             (agent-shell-math-renderer--hex-color color frame))
-        (let ((pair (cons option color)))
-          (unless (member pair agent-shell-math-renderer--warned-colors)
-            (push pair agent-shell-math-renderer--warned-colors)
-            (display-warning
-             'agent-shell-math-renderer
-             (format "Cannot resolve `%s' (%S) as a color; ignoring it"
-                     option color)
-             :warning))
-          nil))))
+    (and (stringp color)
+         (agent-shell-math-renderer--hex-color color frame))))
+
+(defun agent-shell-math-renderer--check-options ()
+  "Warn about each color option whose value is not a color.
+Run when the mode turns on, and in each buffer updated after a watched
+option changed (see `agent-shell-math-renderer--update-after-option').
+The options are `agent-shell-math-renderer-foreground-color' and
+`agent-shell-math-renderer-background-color'; a value that is not a
+string, or that a graphical frame cannot resolve, is ignored when
+equations are drawn (see `agent-shell-math-renderer--option-color').  A
+color resolves on a frame, so the check uses the frame that shows the
+buffer, else any graphical frame; with none, as in a daemon that has
+opened no graphical frame yet, it checks nothing."
+  (when-let* ((frame (or (agent-shell-math-renderer--display-frame
+                          (current-buffer))
+                         (seq-find #'display-graphic-p (frame-list)))))
+    (dolist (option '(agent-shell-math-renderer-foreground-color
+                      agent-shell-math-renderer-background-color))
+      (when-let* ((color (symbol-value option))
+                  ((not (agent-shell-math-renderer--option-color
+                         option frame))))
+        (display-warning
+         'agent-shell-math-renderer
+         (format "%s: `%s' is %S, which is not a color; ignoring it"
+                 (buffer-name) option color)
+         :warning)))))
 
 (defun agent-shell-math-renderer--text-foreground (pos &optional frame)
   "Return the foreground the faces of the text at POS give it, or nil.
@@ -1615,7 +1630,10 @@ in one go (a block of `setq's in an init file)."
   "Re-render the buffers `--option-changed' collected.
 That is each buffer with rendered equations whose local value of a
 watched option changed, or that has no local value of an option whose
-default changed (see `agent-shell-math-renderer--refresh-buffer')."
+default changed (see `agent-shell-math-renderer--refresh-buffer').
+Each is checked first (see `agent-shell-math-renderer--check-options'),
+so a color option set to a value that is not a color warns once per
+buffer."
   (let ((buffers agent-shell-math-renderer--option-buffers)
         (defaults agent-shell-math-renderer--option-defaults))
     (setq agent-shell-math-renderer--option-buffers nil
@@ -1628,6 +1646,8 @@ default changed (see `agent-shell-math-renderer--refresh-buffer')."
                      (seq-some (lambda (option)
                                  (not (local-variable-p option buf)))
                                defaults)))
+        (with-current-buffer buf
+          (agent-shell-math-renderer--check-options))
         (agent-shell-math-renderer--refresh-buffer buf)))))
 
 (dolist (option agent-shell-math-renderer--watched-options)
@@ -2053,7 +2073,8 @@ by `agent-shell-math-renderer-delimiters' and
                   #'agent-shell-math-renderer--maybe-refresh nil t)
         (add-hook 'text-scale-mode-hook
                   #'agent-shell-math-renderer--maybe-refresh nil t)
-        (agent-shell-math-renderer--maybe-subscribe-prompts))
+        (agent-shell-math-renderer--maybe-subscribe-prompts)
+        (agent-shell-math-renderer--check-options))
     (remove-hook 'agent-shell-markdown-render-functions
                  #'agent-shell-math-renderer--render-hook t)
     (remove-hook 'window-buffer-change-functions
