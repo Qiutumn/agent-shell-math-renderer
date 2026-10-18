@@ -82,6 +82,7 @@
 (require 'agent-shell)
 (require 'agent-shell-markdown)
 (require 'comint)
+(require 'icons)
 (require 'latex-to-svg-backend)
 (require 'map)
 (require 'seq)
@@ -301,6 +302,26 @@ in a mode hook or in `.dir-locals.el', to silence one kind of chat."
   :type 'boolean
   :safe #'booleanp
   :group 'agent-shell-math-renderer)
+
+(defcustom agent-shell-math-renderer-failure-mark t
+  "Whether to mark an equation that no engine could typeset.
+
+When non-nil (the default), the icon `agent-shell-math-renderer-failure'
+is shown before the source of a failed equation, with the same tooltip
+as the source: the engine, the error, and the command that opens the
+log, `agent-shell-math-renderer-show-error-log'.  When nil, a failed
+equation looks like an equation not typeset yet.  Change the icon with
+`customize-icon'.  Setting the option with `setq', `setq-local' or
+Customize updates the equations on its own."
+  :type 'boolean
+  :safe #'booleanp
+  :group 'agent-shell-math-renderer)
+
+(define-icon agent-shell-math-renderer-failure nil
+  '((emoji "⚠️") (symbol "⚠") (text "[!]"))
+  "Mark before an equation that no engine could typeset.
+See `agent-shell-math-renderer-failure-mark'."
+  :version "29.1")
 
 ;; Before the defcustoms on purpose, like the padding alias below:
 ;; `defvaralias' discards a value the obsolete name already holds.
@@ -874,6 +895,98 @@ says so: \"Typeset with LaTeX (RaTeX could not parse it): LATEX\"."
             ": "
             (agent-shell-math-renderer--help-echo-text latex))))
 
+(defun agent-shell-math-renderer--failure-help-echo (failure &optional tooltip)
+  "Return the `help-echo' of an equation whose request ended in FAILURE.
+FAILURE is the plist the backend passes to the callback (see
+`latex-to-svg-backend').  For a `formula' failure it names the engine
+and gives the message: \"LaTeX could not typeset it: MESSAGE.\", or
+\"RaTeX could not parse it: MESSAGE.\".  For a `setup' failure it gives
+the message, which names the program that was not found.  The text
+ends with a full stop, unless it already ends with `.', `!' or `?'.
+With TOOLTIP, when FAILURE has a log, a sentence follows on the same
+line, so that a tooltip shown on one line reads well: \"Call
+\\[agent-shell-math-renderer-show-error-log] with point in the equation
+to open the log.\"  The log file is not named."
+  (let* ((engine (plist-get failure :engine))
+         (message (plist-get failure :message))
+         (text (if (eq (plist-get failure :kind) 'setup)
+                   (or message
+                       (format "%s could not run `%s'"
+                               (agent-shell-math-renderer--engine-name engine)
+                               (plist-get failure :program)))
+                 (concat (format "%s could not %s it"
+                                 (agent-shell-math-renderer--engine-name engine)
+                                 (if (eq engine 'ratex) "parse" "typeset"))
+                         (and message (concat ": " message))))))
+    (concat (agent-shell-math-renderer--help-echo-text
+             (if (string-match-p "[.!?]\\'" text) text (concat text ".")))
+            (and tooltip (plist-get failure :log)
+                 " Call \\[agent-shell-math-renderer-show-error-log] with \
+point in the equation to open the log."))))
+
+(defun agent-shell-math-renderer--show-failure (buffer start end failure)
+  "Record FAILURE on BUFFER's equation START..END and mark it.
+FAILURE is the plist the backend passed to the callback.  It is stored
+in the `agent-shell-math-renderer-failure' text property and shown as
+the `help-echo' (see `agent-shell-math-renderer--failure-help-echo').
+With `agent-shell-math-renderer-failure-mark' on, an overlay over the
+equation shows the icon `agent-shell-math-renderer-failure' as its
+`before-string', with the same tooltip; an overlay, so that copying the
+equation does not copy the icon.  START / END may be markers.  Nothing
+is done when BUFFER is dead or the region no longer holds an equation."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (let ((s (if (markerp start) (marker-position start) start))
+            (e (if (markerp end) (marker-position end) end))
+            (help-echo (agent-shell-math-renderer--failure-help-echo
+                        failure t)))
+        (when-let* (((and s e (<= (point-min) s) (< s e) (<= e (point-max))))
+                    (latex (get-text-property
+                            s 'agent-shell-math-renderer-source)))
+          (agent-shell-math-renderer--clear-failure s e latex)
+          (with-silent-modifications
+            (put-text-property s e 'agent-shell-math-renderer-failure failure)
+            (put-text-property s e 'help-echo help-echo))
+          (when agent-shell-math-renderer-failure-mark
+            (let ((ov (make-overlay s e)))
+              (overlay-put ov 'agent-shell-math-renderer-failure t)
+              (overlay-put ov 'evaporate t)
+              (overlay-put ov 'before-string
+                           (concat (propertize
+                                    (icon-string
+                                     'agent-shell-math-renderer-failure)
+                                    'help-echo help-echo)
+                                   " ")))))))))
+
+(defun agent-shell-math-renderer--clear-failure (start end latex)
+  "Remove the failure of the equation LATEX at START..END, if it has one.
+Deletes the failure mark, removes the `agent-shell-math-renderer-failure'
+text property, and gives the region back the `help-echo' of its source.
+Runs in the equation's buffer, before each render."
+  (when (get-text-property start 'agent-shell-math-renderer-failure)
+    (with-silent-modifications
+      (remove-text-properties start end '(agent-shell-math-renderer-failure nil))
+      (put-text-property start end 'help-echo
+                         (agent-shell-math-renderer--help-echo-text latex))))
+  (dolist (ov (overlays-in start end))
+    (when (overlay-get ov 'agent-shell-math-renderer-failure)
+      (delete-overlay ov))))
+
+(defun agent-shell-math-renderer-show-error-log ()
+  "Open the log of the equation at point that no engine could typeset.
+When the failure has no log (a RaTeX parse error, or a program that
+could not run) or the log file is gone, show the error in the echo
+area instead."
+  (interactive)
+  (let* ((failure (get-text-property (point) 'agent-shell-math-renderer-failure))
+         (log (plist-get failure :log)))
+    (cond
+     ((null failure) (user-error "No equation here failed to typeset"))
+     ((and log (file-exists-p log)) (find-file-other-window log))
+     (t (message "%s" (substitute-command-keys
+                       (agent-shell-math-renderer--failure-help-echo
+                        failure)))))))
+
 (defun agent-shell-math-renderer--apply-region (buffer start end latex &optional inline)
   "Mark BUFFER's START..END as math with source LATEX and render it.
 
@@ -1296,7 +1409,9 @@ compiles the SVG and returns no image, and the display hook re-renders
 once the buffer is shown, from the cache.  The callback of an
 async compile reads all three again, on the frame that shows BUFFER
 then.  When the request ends without a picture, the callback leaves
-the source as it is."
+the source as it is and marks it (see
+`agent-shell-math-renderer--show-failure'); each render first removes
+the mark of the previous one."
   (let ((frame (agent-shell-math-renderer--display-frame buffer)))
     (cond
      ((not (agent-shell-math-renderer--graphical-p))
@@ -1306,6 +1421,7 @@ the source as it is."
       (with-current-buffer buffer
         (setq agent-shell-math-renderer--rendered-appearance nil)))
      (t
+      (agent-shell-math-renderer--clear-failure start end latex)
       (let* ((x-height (agent-shell-math-renderer--x-height-at start buffer))
              (doc (agent-shell-math-renderer--wrap latex inline))
              (engine agent-shell-math-renderer-engine)
@@ -1342,29 +1458,30 @@ the source as it is."
              :background background :padding padding :x-height x-height
              :callback
              (lambda (outcome)
-               ;; OUTCOME non-nil: the request ended without a picture, and
-               ;; the source stays as it is.
-               (when (and (null outcome) (buffer-live-p buffer))
-                 (with-current-buffer buffer
-                   ;; Read again: the buffer may be displayed now even if it
-                   ;; was not when the compile was scheduled, or on another
-                   ;; frame.
-                   (let ((frame (agent-shell-math-renderer--display-frame
-                                 buffer)))
-                     (agent-shell-math-renderer--overlay-image
-                      buffer s e
-                      (latex-to-svg-backend
-                       doc :engine engine :fallback fallback :quiet quiet
-                       :rescale-by rescale
-                       :color (agent-shell-math-renderer--foreground-for s frame)
-                       :background (agent-shell-math-renderer--background-for
-                                    frame)
-                       :padding padding
-                       :x-height (agent-shell-math-renderer--x-height-at
-                                  s buffer))
-                      inline
-                      (agent-shell-math-renderer--help-echo
-                       doc latex engine fallback))))))))))))))
+               (if outcome
+                   (agent-shell-math-renderer--show-failure buffer s e outcome)
+                 (when (buffer-live-p buffer)
+                   (with-current-buffer buffer
+                     ;; Read again: the buffer may be displayed now even if it
+                     ;; was not when the compile was scheduled, or on another
+                     ;; frame.
+                     (let ((frame (agent-shell-math-renderer--display-frame
+                                   buffer)))
+                       (agent-shell-math-renderer--overlay-image
+                        buffer s e
+                        (latex-to-svg-backend
+                         doc :engine engine :fallback fallback :quiet quiet
+                         :rescale-by rescale
+                         :color (agent-shell-math-renderer--foreground-for
+                                 s frame)
+                         :background (agent-shell-math-renderer--background-for
+                                      frame)
+                         :padding padding
+                         :x-height (agent-shell-math-renderer--x-height-at
+                                    s buffer))
+                        inline
+                        (agent-shell-math-renderer--help-echo
+                         doc latex engine fallback)))))))))))))))
 
 (defun agent-shell-math-renderer--refresh-buffer (buffer &optional recompile)
   "Re-render every display-math region in BUFFER for the current colors.
@@ -1453,6 +1570,7 @@ fast and untouched buffers refresh lazily when next displayed."
     agent-shell-math-renderer-rescale-inline
     agent-shell-math-renderer-rescale-display
     agent-shell-math-renderer-center-display-math
+    agent-shell-math-renderer-failure-mark
     latex-to-svg-backend-preamble
     latex-to-svg-backend-appended-preamble
     latex-to-svg-backend-preamble-not-precompiled

@@ -1141,6 +1141,136 @@ graphical frame is needed."
       (should (equal "\\(\\notacommand\\)" (buffer-string)))
       (should-not (get-text-property (point-min) 'display)))))
 
+;; What the backend passes the callback when LaTeX rejects an equation.
+(defconst agent-shell-math-renderer-tests--failure
+  '(:kind formula :engine latex :message "Undefined control sequence"
+    :line 1 :column 13 :log "/tmp/asmr-tests.log" :program nil))
+
+(defmacro agent-shell-math-renderer-tests--with-failed-equation (calls &rest body)
+  "Evaluate BODY in a buffer holding one equation whose request failed.
+The equation is `\\(\\notacommand\\)', rendered with the backend
+stubbed (see `agent-shell-math-renderer-tests--with-backend-calls',
+which binds CALLS), and its callback called with
+`agent-shell-math-renderer-tests--failure'."
+  (declare (indent 1) (debug t))
+  `(agent-shell-math-renderer-tests--with-backend-calls ,calls
+     (with-temp-buffer
+       (insert "\\(\\notacommand\\)")
+       (add-text-properties
+        (point-min) (point-max)
+        '(agent-shell-math-renderer-source "\\notacommand"
+          help-echo "\\=\\notacommand"))
+       (agent-shell-math-renderer--render
+        (current-buffer) (point-min) (point-max) "\\notacommand" t)
+       (funcall (plist-get (cdar ,calls) :callback)
+                agent-shell-math-renderer-tests--failure)
+       ,@body)))
+
+(defun agent-shell-math-renderer-tests--failure-marks ()
+  "Return the failure marks in the current buffer."
+  (seq-filter (lambda (ov) (overlay-get ov 'agent-shell-math-renderer-failure))
+              (overlays-in (point-min) (point-max))))
+
+(ert-deftest agent-shell-math-renderer-failure-help-echo ()
+  ;; `help-echo' names the engine and gives the message, as written:
+  ;; Emacs runs it through `substitute-command-keys'.  It does not name
+  ;; the log: `agent-shell-math-renderer-show-error-log' opens it.
+  (dolist (case
+           `((,agent-shell-math-renderer-tests--failure
+              . "LaTeX could not typeset it: Undefined control sequence.")
+             ;; In a tooltip, the command that opens the log follows.
+             ((tooltip . ,agent-shell-math-renderer-tests--failure)
+              . ,(concat "LaTeX could not typeset it: Undefined control "
+                         "sequence. Call M-x "
+                         "agent-shell-math-renderer-show-error-log with point "
+                         "in the equation to open the log."))
+             ((:kind formula :engine ratex :message "Unknown command `\\x'")
+              . "RaTeX could not parse it: Unknown command `\\x'.")
+             ((:kind formula :engine ratex :message "Unexpected end!")
+              . "RaTeX could not parse it: Unexpected end!")
+             ((:kind formula :engine texres)
+              . "texres could not typeset it.")
+             ((:kind setup :engine texres :program "pdftocairo"
+               :message "The texres engine could not run `pdftocairo': program not found.")
+              . "The texres engine could not run `pdftocairo': program not found.")))
+    (should (equal (substitute-command-keys
+                    (if (eq (caar case) 'tooltip)
+                        (agent-shell-math-renderer--failure-help-echo
+                         (cdar case) t)
+                      (agent-shell-math-renderer--failure-help-echo (car case))))
+                   (cdr case)))))
+
+(ert-deftest agent-shell-math-renderer-failure-mark ()
+  ;; A failed equation gets the icon before its source, with the tooltip
+  ;; of the source.  The next render removes the mark and gives the source
+  ;; its own tooltip back; with the option off, no mark is shown.
+  (agent-shell-math-renderer-tests--with-failed-equation calls
+    (let* ((marks (agent-shell-math-renderer-tests--failure-marks))
+           (mark (overlay-get (car marks) 'before-string)))
+      (should (= 1 (length marks)))
+      (should (string-prefix-p
+               (substring-no-properties
+                (icon-string 'agent-shell-math-renderer-failure))
+               mark))
+      (should (equal (get-text-property 0 'help-echo mark)
+                     (get-text-property (point-min) 'help-echo)))
+      (should (string-suffix-p "to open the log."
+                               (substitute-command-keys
+                                (get-text-property (point-min) 'help-echo))))
+      (should (equal (get-text-property
+                      (point-min) 'agent-shell-math-renderer-failure)
+                     agent-shell-math-renderer-tests--failure))
+      ;; A second failure of the same equation does not add a second mark.
+      (funcall (plist-get (cdar calls) :callback)
+               agent-shell-math-renderer-tests--failure)
+      (should (= 1 (length (agent-shell-math-renderer-tests--failure-marks)))))
+    (agent-shell-math-renderer--render
+     (current-buffer) (point-min) (point-max) "\\notacommand" t)
+    (should-not (agent-shell-math-renderer-tests--failure-marks))
+    (should-not (get-text-property (point-min) 'agent-shell-math-renderer-failure))
+    (should (equal (get-text-property (point-min) 'help-echo)
+                   "\\=\\notacommand"))
+    (let ((agent-shell-math-renderer-failure-mark nil))
+      (funcall (plist-get (cdar calls) :callback)
+               agent-shell-math-renderer-tests--failure)
+      (should-not (agent-shell-math-renderer-tests--failure-marks))
+      (should (get-text-property
+               (point-min) 'agent-shell-math-renderer-failure)))))
+
+(ert-deftest agent-shell-math-renderer-show-error-log ()
+  ;; The command opens the log of the failed equation at point.  With no
+  ;; log, or a log file that is gone, it shows the error.  Elsewhere it is
+  ;; an error.
+  (agent-shell-math-renderer-tests--with-failed-equation calls
+    (let* ((log (make-temp-file "asmr-log"))
+           (opened nil)
+           (messages nil)
+           (fail (lambda (log)
+                   (funcall (plist-get (cdar calls) :callback)
+                            (plist-put (copy-sequence
+                                        agent-shell-math-renderer-tests--failure)
+                                       :log log)))))
+      (unwind-protect
+          (cl-letf (((symbol-function 'find-file-other-window)
+                     (lambda (file) (push file opened)))
+                    ((symbol-function 'message)
+                     (lambda (format &rest args)
+                       (push (apply #'format-message format args) messages))))
+            (funcall fail log)
+            (goto-char 3)
+            (agent-shell-math-renderer-show-error-log)
+            (should (equal opened (list log)))
+            (dolist (gone (list nil (concat log ".gone")))
+              (funcall fail gone)
+              (agent-shell-math-renderer-show-error-log)
+              (should (string-prefix-p "LaTeX could not typeset it: Undefined"
+                                       (car messages))))
+            (should (= (length opened) 1))
+            (goto-char (point-max))
+            (should-error (agent-shell-math-renderer-show-error-log)
+                          :type 'user-error))
+        (delete-file log)))))
+
 (ert-deftest agent-shell-math-renderer-no-render-without-graphical-frame ()
   ;; With no graphical frame the backend is not called and the signature is
   ;; cleared, so the display hook renders the buffer once a graphical window

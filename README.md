@@ -360,12 +360,25 @@ retry after a fix the cache cannot see, such as installing a missing TeX
 package or upgrading RaTeX, run `C-u M-x agent-shell-math-renderer-refresh`
 in the chat buffer: it recompiles that buffer's equations, bypassing the cache.
 
+#### Failed equations
+
+When no engine can typeset an equation, its source stays as text. A warning
+icon stands before the source: ⚠️, ⚠ or `[!]`, the first one Emacs can show.
+Hovering over the source or the icon shows the engine, the error and how to
+open the log: "LaTeX could not typeset it: Undefined control sequence. Call
+M-x agent-shell-math-renderer-show-error-log with point in the equation to
+open the log." `M-x agent-shell-math-renderer-show-error-log` with point in
+the equation opens the log; when there is none (RaTeX's errors, a program that
+could not run), it shows the error in the echo area. To remove the icon, set
+`agent-shell-math-renderer-failure-mark` to nil; to change it, `M-x
+customize-icon RET agent-shell-math-renderer-failure`.
+
 #### Quiet failures
 
 The backend warns once per equation per buffer about an equation it cannot
 typeset, naming the buffer and linking to the log. To silence those warnings,
 set `agent-shell-math-renderer-quiet`; the equation then keeps its source as
-text.
+text, with the icon of [Failed equations](#failed-equations).
 Configuration problems, such as missing programs, still warn. Set it
 buffer-locally, in a mode hook or in `.dir-locals.el`, to silence one kind of
 chat.
@@ -417,6 +430,7 @@ group (`M-x customize-group RET agent-shell-math-renderer`):
 | `agent-shell-math-renderer-engine` | `latex` | Engine that typesets the equations: `latex` (`latex` + `dvisvgm`), `ratex` (RaTeX's `render-svg`) or `texres` (the `pdflatex` of texres + `pdftocairo`). See [Engine](#engine). Setting it updates the equations on its own. |
 | `agent-shell-math-renderer-fallback` | `t` | Typeset with LaTeX an equation the engine rejects, when the engine is `ratex`. See [Falling back to LaTeX](#falling-back-to-latex). |
 | `agent-shell-math-renderer-quiet` | `nil` | Drop the backend's warning about an equation it cannot typeset. Configuration problems still warn. See [Quiet failures](#quiet-failures). |
+| `agent-shell-math-renderer-failure-mark` | `t` | Show a warning icon before an equation that no engine could typeset. See [Failed equations](#failed-equations). |
 | `agent-shell-math-renderer-rescale-inline` | `1.0` | Size multiplier for inline `\(…\)` math, on top of the backend's `latex-to-svg-backend-font-scale`. Re-scales from cache; setting it updates the equations on its own. |
 | `agent-shell-math-renderer-rescale-display` | `1.0` | Size multiplier for display math (`\[…\]`, `$$…$$`, fenced), on top of `latex-to-svg-backend-font-scale`. Re-scales from cache; setting it updates the equations on its own. |
 | `agent-shell-math-renderer-foreground-color` | `nil` | Color of equations in text drawn in the default foreground. An equation in colored text (a heading, a link) keeps the color of that text. `nil` follows the foreground of the `default` face on the frame that shows the buffer (tracks the theme). A name that frame cannot resolve, or a value that is not a string, is reported with a warning and treated as `nil`. Re-tints from cache; setting it updates the equations on its own. |

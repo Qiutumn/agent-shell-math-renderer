@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- An equation that no engine could typeset shows a warning icon before its
+  source, with the tooltip of the source: the engine, the error and the
+  command that opens the log (latex-to-svg issue #7). Before, it looked
+  like an equation not typeset yet. `agent-shell-math-renderer-failure-mark`
+  (default t) turns it off; `customize-icon` changes the icon
+  (`agent-shell-math-renderer-failure`).
+- `agent-shell-math-renderer-show-error-log` opens the log of the failed
+  equation at point, or shows the error in the echo area when there is no
+  log. The tooltip of a failed equation names it.
+
 ## [0.14.0] - 2026-10-14
 
 ### Changed
