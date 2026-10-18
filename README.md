@@ -86,8 +86,8 @@ inline equation in a heading has the heading's color and size.
   MacTeX; `dvisvgm` ships with TeX Live), or RaTeX's `render-svg` for the
   `ratex` engine, or texres and `pdftocairo` for the `texres` engine (see
   [Engine](#engine)). When a program of the requested engine is not found, the
-  backend warns once per session, naming the engine and the program, and the
-  equation stays as raw LaTeX text.
+  backend warns, naming the engine and the program, and the equation stays as
+  raw LaTeX text.
 - An Emacs build with **SVG support** for the images (raw LaTeX is shown
   otherwise).
 
