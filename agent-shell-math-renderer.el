@@ -7,7 +7,7 @@
 ;; Assisted-by: Claude:claude-opus-4-8
 ;; URL: https://github.com/alberti42/agent-shell-math-renderer
 ;; Version: 0.15.0
-;; Package-Requires: ((emacs "29.1") (agent-shell "0.67.1") (latex-to-svg-backend "0.15.0"))
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.67.1") (latex-to-svg-backend "0.16.0"))
 ;; Keywords: tex, llm, math, education
 
 ;; This package is free software; you can redistribute it and/or modify

@@ -77,8 +77,8 @@ inline equation in a heading has the heading's color and size.
   the release with the backslash-escape pass, the right-label render-function
   suppression the hook relies on, and the `session-restored` event that renders
   the prompts of a restored session)
-- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.15.0
-  or newer (the release whose callback receives the outcome of the request) — the backend (equation compile, caching, display-time tint/scale)
+- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.16.0
+  or newer (the release with the option names and the two file lists the README uses) — the backend (equation compile, caching, display-time tint/scale)
   is factored out into this standalone library. All typesetting knobs (LaTeX /
   dvisvgm / RaTeX / texres programs, preamble, cache directory, font scale)
   live in its `latex-to-svg-backend-*` customization group.

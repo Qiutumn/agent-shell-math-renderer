@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preamble does. The README's section on a project's preamble describes
   the four options.
 
+### Changed
+
+- Requires latex-to-svg-backend 0.16.0 or newer, whose option names
+  (`latex-to-svg-backend-preamble-packages`,
+  `latex-to-svg-backend-preamble-macros`) and file lists the README and
+  the watched options use.
+
 ## [0.15.0] - 2026-10-18
 
 ### Added
