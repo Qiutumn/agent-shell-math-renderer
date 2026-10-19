@@ -1798,6 +1798,26 @@ strings, and the buffer font has an x-height of 18."
                      '(agent-shell-math-renderer-padding-inline)))
       (should (= 1 scheduled)))))
 
+(ert-deftest agent-shell-math-renderer-backend-options-are-watched ()
+  ;; The backend's options in the cache key that a project sets in
+  ;; `.dir-locals.el' (the three preambles, the files two of them load,
+  ;; the width of numbered equations, RaTeX's macros) update the equations
+  ;; like this package's own options.
+  (dolist (option '(latex-to-svg-backend-preamble
+                    latex-to-svg-backend-preamble-packages
+                    latex-to-svg-backend-preamble-macros
+                    latex-to-svg-backend-preamble-package-files
+                    latex-to-svg-backend-preamble-macro-files
+                    latex-to-svg-backend-line-width
+                    latex-to-svg-backend-ratex-macros))
+    (should (memq #'agent-shell-math-renderer--option-changed
+                  (get-variable-watchers option))))
+  ;; No backend option is named by an obsolete alias: users read the new
+  ;; names.
+  (dolist (option agent-shell-math-renderer--watched-options)
+    (when (string-prefix-p "latex-to-svg-backend-" (symbol-name option))
+      (should-not (get option 'byte-obsolete-variable)))))
+
 (ert-deftest agent-shell-math-renderer-option-default-skips-buffers-with-own-value ()
   ;; A change of `latex-to-svg-backend-preamble-macros''s default
   ;; updates the chats that use the default, not a chat with its own value

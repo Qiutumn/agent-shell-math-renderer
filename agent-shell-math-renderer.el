@@ -1589,11 +1589,13 @@ fast and untouched buffers refresh lazily when next displayed."
     latex-to-svg-backend-preamble
     latex-to-svg-backend-preamble-packages
     latex-to-svg-backend-preamble-macros
+    latex-to-svg-backend-preamble-package-files
+    latex-to-svg-backend-preamble-macro-files
     latex-to-svg-backend-line-width
     latex-to-svg-backend-ratex-macros)
   "Options whose change updates the equations on its own.
 Each has a variable watcher (`agent-shell-math-renderer--option-changed').
-The last five are the backend's options in the cache key, which a
+The last seven are the backend's options in the cache key, which a
 project sets in `.dir-locals.el'.")
 
 (defvar agent-shell-math-renderer--option-buffers nil

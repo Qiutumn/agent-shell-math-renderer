@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Setting `latex-to-svg-backend-preamble-package-files` or
+  `latex-to-svg-backend-preamble-macro-files`, the files the project's
+  preambles load (backend 0.16.0), updates the equations, as setting a
+  preamble does. The README's section on a project's preamble describes
+  the four options.
+
 ## [0.15.0] - 2026-10-18
 
 ### Added
