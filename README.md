@@ -251,16 +251,16 @@ The same works for the other side-effect-free options (`-delimiters`,
 `-rescale-inline`, `-rescale-display`, the color/box options, and the backend's
 `latex-to-svg-backend-font-scale`).
 The backend's toolchain and preamble options (`latex-to-svg-backend-latex-program`,
-`-dvisvgm-program`, `-preamble`, `-appended-preamble`, `-preamble-not-precompiled`,
+`-dvisvgm-program`, `-preamble`, `-preamble-packages`, `-preamble-macros`,
 `-cache-directory`) are
 **not** marked safe — a `.dir-locals.el` lives inside the repo, and those feed a
 compiler or run a program, so Emacs will ask before applying them.
 
 A chat started in a project typesets its equations with the project's preamble
-from `.dir-locals.el`, set in `latex-to-svg-backend-appended-preamble` (for
-packages) or `latex-to-svg-backend-preamble-not-precompiled` (enough for
+from `.dir-locals.el`, set in `latex-to-svg-backend-preamble-packages` (for
+packages) or `latex-to-svg-backend-preamble-macros` (enough for
 macros), such as
-`((nil . ((latex-to-svg-backend-preamble-not-precompiled . "\\input{macros.tex}"))))`
+`((nil . ((latex-to-svg-backend-preamble-macros . "\\input{macros.tex}"))))`
 for a file of macros. The backend README's
 [A project's preamble](https://github.com/alberti42/latex-to-svg-backend#a-projects-preamble)
 compares the two options and gives the details. Answering `!` to Emacs's
@@ -326,7 +326,7 @@ What RaTeX does not typeset:
 
 - **Packages.** A command KaTeX does not have fails to compile: siunitx's
   `\SI` and `\unit`, `\DeclareMathOperator` (use `\operatorname`), and any
-  package in `latex-to-svg-backend-appended-preamble`, which RaTeX does not
+  package in `latex-to-svg-backend-preamble-packages`, which RaTeX does not
   read. Define macros in `latex-to-svg-backend-ratex-macros` instead.
 - **Environments KaTeX does not have**, such as `multline` and `eqnarray`.
 
@@ -394,7 +394,7 @@ folded into the cache key, so changing it invalidates stale images
 automatically:
 
 ```elisp
-(setq latex-to-svg-backend-appended-preamble
+(setq latex-to-svg-backend-preamble-packages
       "\\usepackage{physics}
 \\usepackage{siunitx}")
 ```
@@ -448,7 +448,7 @@ in the
 | Option | Default | Description |
 |--------|---------|-------------|
 | `latex-to-svg-backend-font-scale` | `1.0` | Equation size relative to the buffer font (`1.0` = match). |
-| `latex-to-svg-backend-appended-preamble` | `""` | Extra LaTeX appended to the base preamble (load packages here). |
+| `latex-to-svg-backend-preamble-packages` | `""` | Extra LaTeX appended to the base preamble (load packages here). |
 | `latex-to-svg-backend-preamble` | standalone + amsmath/amssymb/xcolor | The base LaTeX preamble. |
 | `latex-to-svg-backend-latex-program` | `"latex"` | Program compiling LaTeX → DVI. |
 | `latex-to-svg-backend-dvisvgm-program` | `"dvisvgm"` | Program converting DVI → SVG. |
@@ -470,7 +470,7 @@ These options update the equations on their own when you set them, with
 | `agent-shell-math-renderer-padding-inline`, `-padding-display` | the pictures are redrawn from cache |
 | `agent-shell-math-renderer-rescale-inline`, `-rescale-display` | the pictures are redrawn from cache |
 | `agent-shell-math-renderer-center-display-math` | the pictures are redrawn from cache |
-| `latex-to-svg-backend-preamble`, `-appended-preamble`, `-preamble-not-precompiled` | the equations are compiled with the new preamble, or taken from cache if compiled with it before |
+| `latex-to-svg-backend-preamble`, `-preamble-packages`, `-preamble-macros` | the equations are compiled with the new preamble, or taken from cache if compiled with it before |
 | `latex-to-svg-backend-line-width` | the numbered equations are compiled with the new width, or taken from cache if compiled with it before |
 | `latex-to-svg-backend-ratex-macros` | the equations typeset with RaTeX are compiled with the new macros, or taken from cache if compiled with them before |
 

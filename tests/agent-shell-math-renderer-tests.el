@@ -1799,7 +1799,7 @@ strings, and the buffer font has an x-height of 18."
       (should (= 1 scheduled)))))
 
 (ert-deftest agent-shell-math-renderer-option-default-skips-buffers-with-own-value ()
-  ;; A change of `latex-to-svg-backend-preamble-not-precompiled''s default
+  ;; A change of `latex-to-svg-backend-preamble-macros''s default
   ;; updates the chats that use the default, not a chat with its own value
   ;; (set by its `.dir-locals.el').  A buffer-local change updates that chat.
   (let ((agent-shell-math-renderer--option-buffers nil)
@@ -1816,14 +1816,14 @@ strings, and the buffer font has an x-height of 18."
             (with-current-buffer buf
               (setq agent-shell-math-renderer--present t)))
           (with-current-buffer own
-            (setq-local latex-to-svg-backend-preamble-not-precompiled
+            (setq-local latex-to-svg-backend-preamble-macros
                         "\\input{m}"))
           (should (equal agent-shell-math-renderer--option-buffers (list own)))
           (agent-shell-math-renderer--update-after-option)
           (should (equal updated (list own)))
           (setq updated nil)
-          (let ((latex-to-svg-backend-preamble-not-precompiled ""))
-            (setq latex-to-svg-backend-preamble-not-precompiled "\\input{g}")
+          (let ((latex-to-svg-backend-preamble-macros ""))
+            (setq latex-to-svg-backend-preamble-macros "\\input{g}")
             (agent-shell-math-renderer--update-after-option)
             (should (equal updated (list uses-default)))))
       (kill-buffer own)

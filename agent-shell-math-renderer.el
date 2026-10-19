@@ -1587,8 +1587,8 @@ fast and untouched buffers refresh lazily when next displayed."
     agent-shell-math-renderer-center-display-math
     agent-shell-math-renderer-failure-mark
     latex-to-svg-backend-preamble
-    latex-to-svg-backend-appended-preamble
-    latex-to-svg-backend-preamble-not-precompiled
+    latex-to-svg-backend-preamble-packages
+    latex-to-svg-backend-preamble-macros
     latex-to-svg-backend-line-width
     latex-to-svg-backend-ratex-macros)
   "Options whose change updates the equations on its own.
