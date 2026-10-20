@@ -14,6 +14,9 @@ with [RaTeX](https://github.com/erweixin/RaTeX), and shown as crisp, theme-match
 SVG images — while the original LaTeX stays in the buffer, so copy and save
 round-trip renderable source.
 
+Disclosure: Written with AI assistance (Claude). Every change is reviewed and tested
+by the author, and design decisions are the author's.
+
 [![agent-shell-math-renderer rendering the Schrödinger equation in an agent response](images/demo.jpeg)](https://www.youtube.com/watch?v=wGM3xH06Wso)
 
 *▶ [Watch the ~30-second demo](https://www.youtube.com/watch?v=wGM3xH06Wso) (silent). Toward the end the buffer font size is changed and every equation re-scales to match automatically.*
