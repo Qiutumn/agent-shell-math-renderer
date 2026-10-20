@@ -158,9 +158,8 @@ A list whose members are keys of
 
 The two are independent — add or drop one to toggle it.  An empty
 list disables the delimiter styles (fenced math via
-`agent-shell-math-renderer-fence-languages' is separate); the
-master switch `agent-shell-math-renderer-enabled' disables
-everything.
+`agent-shell-math-renderer-fence-languages' is separate); turning
+`agent-shell-math-renderer-mode' off disables everything.
 
 Both styles are matched only as block-level equations: the opener
 must start its line (after optional indentation) and the closer
@@ -177,15 +176,11 @@ collides with your prose."
   :group 'agent-shell-math-renderer)
 
 (defvar agent-shell-math-renderer-mode)
-(defvar agent-shell-math-renderer-enabled)
 
 (defun agent-shell-math-renderer--active-p ()
   "Return non-nil when math rendering should act in the current buffer.
-True when the buffer-local `agent-shell-math-renderer-mode' is on, or the
-obsolete `agent-shell-math-renderer-enabled' switch is set."
-  (or agent-shell-math-renderer-mode
-      (with-suppressed-warnings ((obsolete agent-shell-math-renderer-enabled))
-        agent-shell-math-renderer-enabled)))
+True when the buffer-local `agent-shell-math-renderer-mode' is on."
+  agent-shell-math-renderer-mode)
 
 (defcustom agent-shell-math-renderer-fence-languages '("math")
   "Fenced-code-block languages rendered as display math.
@@ -198,7 +193,7 @@ case-insensitively), e.g.
   ```
 
 is typeset as an equation instead of shown as a code block — but
-only when `agent-shell-math-renderer-enabled' is non-nil.  This
+only when `agent-shell-math-renderer-mode' is on.  This
 complements the `\\=\\[...\\]' / `$$...$$' delimiter styles.
 
 `math' is the sole default because it names a *role*: it is
@@ -221,8 +216,8 @@ Set to nil to leave every fence as code."
 (defcustom agent-shell-math-renderer-render-inline t
   "When non-nil, recognize inline math `\\(...\\)' in agent responses.
 
-Only effective when the master switch
-`agent-shell-math-renderer-enabled' is non-nil.  Inline math is
+Only effective when `agent-shell-math-renderer-mode' is on.
+Inline math is
 typeset in text style and overlaid in place,
 so it sits within the surrounding line rather than on its own.
 
@@ -530,7 +525,7 @@ the equations on its own."
   "When non-nil, render math in submitted user prompts.
 
 This option has an effect only when
-`agent-shell-math-renderer-enabled' is also non-nil.
+`agent-shell-math-renderer-mode' is also on.
 
 The usual delimiter and inline settings apply: prompts render
 `\\=\\[...\\]' / `$$...$$' according to

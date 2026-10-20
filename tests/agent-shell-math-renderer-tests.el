@@ -59,27 +59,29 @@
 ;; `agent-shell-math-renderer-mode'.  These tests drive the pipeline through
 ;; `agent-shell-markdown-convert' in throwaway buffers (no mode), so install
 ;; the hook globally for the suite; it still no-ops unless a test opts in by
-;; binding `agent-shell-math-renderer-enabled' (checked via `--active-p').
+;; binding the default value of `agent-shell-math-renderer-mode' (checked via
+;; `--active-p').  A plain `let' of the mode variable would bind only the
+;; current buffer's value, which a `with-temp-buffer' inside it does not see.
 (add-hook 'agent-shell-markdown-render-functions
           #'agent-shell-math-renderer--render-hook)
 
 (defmacro agent-shell-math-renderer-tests--enabled (&rest body)
   "Evaluate BODY with math rendering enabled.
-`agent-shell-math-renderer-enabled' (the master switch) defaults to
-nil, so every test that expects equations to render must opt in;
-this binds it for the default delimiter set (`bracket')."
+`agent-shell-math-renderer-mode' is off by default, so every test
+that expects equations to render must opt in; this binds its default
+value for the default delimiter set (`bracket')."
   (declare (indent 0) (debug t))
-  `(let ((agent-shell-math-renderer-enabled t))
+  `(cl-letf (((default-value 'agent-shell-math-renderer-mode) t))
      ,@body))
 
 (defmacro agent-shell-math-renderer-tests--with-dollar (&rest body)
   "Evaluate BODY with math rendering on and `$$...$$' enabled.
 `agent-shell-math-renderer-delimiters' defaults to `bracket' only,
-so the dollar-delimited tests opt into `dollar' (and the master
-`agent-shell-math-renderer-enabled' switch) through this one binding."
+so the dollar-delimited tests opt into `dollar' (and
+`agent-shell-math-renderer-mode') through this one binding."
   (declare (indent 0) (debug t))
-  `(let ((agent-shell-math-renderer-enabled t)
-         (agent-shell-math-renderer-delimiters '(dollar bracket)))
+  `(cl-letf (((default-value 'agent-shell-math-renderer-mode) t)
+             (agent-shell-math-renderer-delimiters '(dollar bracket)))
      ,@body))
 
 (ert-deftest agent-shell-math-renderer-display-math-protects-markup ()
@@ -169,8 +171,8 @@ $$ x $$
   ;; independently: with only `bracket' enabled, a block-level
   ;; `\\[...\\]' renders while `$$...$$' is left as plain text (and its
   ;; `**' inside is processed as ordinary markup).
-  (let ((agent-shell-math-renderer-enabled t)
-        (agent-shell-math-renderer-delimiters '(bracket)))
+  (cl-letf (((default-value 'agent-shell-math-renderer-mode) t)
+            (agent-shell-math-renderer-delimiters '(bracket)))
     (should (equal (agent-shell-markdown--deconstruct
                     (agent-shell-markdown-convert
                      "$$ **b** $$
@@ -188,8 +190,8 @@ $$ x $$
   ;; `\[' / `\]' are shown as `[' / `]' -- agent-shell 0.66.1+ unescapes
   ;; backslash-escaped punctuation per CommonMark (only frozen math is
   ;; spared, so this text isn't).
-  (let ((agent-shell-math-renderer-enabled t)
-        (agent-shell-math-renderer-delimiters '()))
+  (cl-letf (((default-value 'agent-shell-math-renderer-mode) t)
+            (agent-shell-math-renderer-delimiters '()))
     (should (equal (agent-shell-markdown--deconstruct
                     (agent-shell-markdown-convert
                      "x \\[ **y** \\] z"))
@@ -397,7 +399,7 @@ x = 1
   ;; becomes bold) — math rendering is fully gated.  The unclaimed
   ;; `\[' / `\]' show unescaped as `[' / `]' (agent-shell 0.66.1+
   ;; CommonMark backslash-unescaping).
-  (let ((agent-shell-math-renderer-enabled nil))
+  (cl-letf (((default-value 'agent-shell-math-renderer-mode) nil))
     (should (equal (agent-shell-markdown--deconstruct
                     (agent-shell-markdown-convert "before \\[ **x** \\] after"))
                    '(("before [ " nil)
@@ -407,9 +409,9 @@ x = 1
 (ert-deftest agent-shell-math-renderer-fenced-math-as-code-when-off ()
   ;; With the master switch off, a ```math fence is left as an ordinary
   ;; code block (source-block face), not a math equation.
-  (let* ((agent-shell-math-renderer-enabled nil)
-         (runs (agent-shell-markdown--deconstruct
-                (agent-shell-markdown-convert "```math
+  (cl-letf* (((default-value 'agent-shell-math-renderer-mode) nil)
+             (runs (agent-shell-markdown--deconstruct
+                    (agent-shell-markdown-convert "```math
 E=mc^2
 ```"))))
     (should-not (seq-some (lambda (run)
@@ -424,8 +426,8 @@ E=mc^2
   ;; even on a graphical frame and with the feature on, equations are still
   ;; recognized and faced (markup protected), but no image is overlaid and
   ;; conversion never errors — the raw LaTeX simply shows as faced text.
-  ;; (A user who doesn't want even that sets `agent-shell-math-renderer-enabled'
-  ;; to nil; there is deliberately no PNG fallback.)
+  ;; (A user who doesn't want even that turns `agent-shell-math-renderer-mode'
+  ;; off; there is deliberately no PNG fallback.)
   (agent-shell-math-renderer-tests--enabled
     (cl-letf (((symbol-function 'image-type-available-p) (lambda (_) nil))
               ((symbol-function 'display-graphic-p) (lambda (&rest _) t)))
@@ -678,8 +680,8 @@ after text.
   ;; `agent-shell-math-renderer-render-inline' nil disables `\\(...\\)'
   ;; even with the master switch on: delimiters are plain and inner
   ;; markup (`**x**') is processed normally.
-  (let ((agent-shell-math-renderer-enabled t)
-        (agent-shell-math-renderer-render-inline nil))
+  (cl-letf (((default-value 'agent-shell-math-renderer-mode) t)
+            (agent-shell-math-renderer-render-inline nil))
     (should (equal (agent-shell-markdown--deconstruct
                     (agent-shell-markdown-convert "a \\( **x** \\) b"))
                    '(("a ( " nil)
@@ -691,7 +693,7 @@ after text.
   ;; inner markup is processed (here `**x**' becomes bold).  The
   ;; unclaimed `\(' / `\)' show unescaped as `(' / `)' (agent-shell
   ;; 0.66.1+ CommonMark backslash-unescaping).
-  (let ((agent-shell-math-renderer-enabled nil))
+  (cl-letf (((default-value 'agent-shell-math-renderer-mode) nil))
     (should (equal (agent-shell-markdown--deconstruct
                     (agent-shell-markdown-convert "a \\( **x** \\) b"))
                    '(("a ( " nil)
@@ -730,8 +732,8 @@ reads."
   ;; `--refresh-if-changed' triggers a refresh when only the x-height
   ;; moved (colors unchanged), and targets just the current buffer (the
   ;; one the hook made relevant) rather than every buffer.
-  (let ((agent-shell-math-renderer-enabled t)
-        (refreshed nil))
+  (cl-letf (((default-value 'agent-shell-math-renderer-mode) t)
+            (refreshed nil))
     (with-temp-buffer
       (setq agent-shell-math-renderer--present t)
       ;; Buffer was last rendered at x-height 20; same colors.
@@ -806,8 +808,8 @@ reads."
 (ert-deftest agent-shell-math-renderer-refresh-if-changed-skips-non-present ()
   ;; In a buffer with no equations (`--present' nil), a hook firing is a
   ;; no-op even if the appearance differs — nothing to re-render.
-  (let ((agent-shell-math-renderer-enabled t)
-        (refreshed nil))
+  (cl-letf (((default-value 'agent-shell-math-renderer-mode) t)
+            (refreshed nil))
     (with-temp-buffer
       (setq agent-shell-math-renderer--present nil)
       (setq agent-shell-math-renderer--rendered-appearance nil)
@@ -2041,7 +2043,7 @@ strings, and the buffer font has an x-height of 18."
             (insert "prompt \\(x\\)")
             (setq-local comint-last-input-start (copy-marker (point-min)))
             (setq-local comint-last-input-end (copy-marker (point-max)))
-            (setq-local agent-shell-math-renderer-enabled t)
+            (setq-local agent-shell-math-renderer-mode t)
             (setq-local agent-shell-math-renderer-render-submitted-prompts t))
           (with-temp-buffer
             (cl-letf (((symbol-function 'run-at-time)
@@ -2111,7 +2113,7 @@ strings, and the buffer font has an x-height of 18."
       (insert "prompt \\(x\\)")
       (let ((comint-last-input-start (copy-marker (point-min)))
             (comint-last-input-end (copy-marker (point-max)))
-            (agent-shell-math-renderer-enabled t)
+            (agent-shell-math-renderer-mode t)
             (agent-shell-math-renderer-render-submitted-prompts nil))
         (cl-letf (((symbol-function 'run-at-time)
                    (lambda (&rest _)
