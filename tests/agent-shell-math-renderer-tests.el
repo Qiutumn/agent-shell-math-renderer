@@ -1509,7 +1509,9 @@ strings, and the buffer font has an x-height of 18."
            (cl-letf (((symbol-function 'agent-shell-math-renderer--graphical-p)
                       #'always)
                      ((symbol-function 'agent-shell-math-renderer--display-window)
-                      (lambda (_buffer) (selected-window)))
+                      (lambda (buffer)
+                        (set-window-buffer (selected-window) buffer)
+                        (selected-window)))
                      ((symbol-function 'agent-shell-math-renderer--display-frame)
                       (lambda (_buffer) (selected-frame)))
                      ((symbol-function 'agent-shell-math-renderer--x-height)
@@ -1736,6 +1738,29 @@ strings, and the buffer font has an x-height of 18."
           (should (equal (sort (delete-dups sizes)
                                (lambda (x y) (string< (car x) (car y))))
                          '(("$a$" . 9.0) ("$b$" . 13.5) ("\\[ c \\]" . 13.5)))))))))
+
+(ert-deftest agent-shell-math-renderer-x-height-at-outside-the-buffer ()
+  ;; A POS outside the accessible part of the buffer, such as the marker of
+  ;; a deleted equation at `point-max', or text outside a narrowing, gets
+  ;; the buffer font's x-height (18 in `--with-frame').  The stub of
+  ;; `font-at' signals there, as the real one does.
+  (agent-shell-math-renderer-tests--with-frame
+    (cl-letf (((symbol-function 'font-at)
+               (lambda (pos &rest _)
+                 (unless (and (<= (point-min) pos) (< pos (point-max)))
+                   (signal 'args-out-of-range
+                           (list pos (point-min) (point-max))))
+                 'plain-font))
+              ((symbol-function 'query-font)
+               (lambda (_font) ["plain" nil 20 nil 20 5 nil nil nil]))
+              ((symbol-function 'agent-shell-math-renderer--x-height-ratio)
+               (lambda (&rest _) 0.5)))
+      (with-temp-buffer
+        (insert "abc")
+        (should (equal (agent-shell-math-renderer--x-height-at 2) 10.0))
+        (should (equal (agent-shell-math-renderer--x-height-at 4) 18))
+        (narrow-to-region 2 3)
+        (should (equal (agent-shell-math-renderer--x-height-at 1) 18))))))
 
 (ert-deftest agent-shell-math-renderer-help-echo-names-the-engine ()
   ;; Once the image is laid, the tooltip names the engine before the LaTeX,

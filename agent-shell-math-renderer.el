@@ -1245,7 +1245,8 @@ size, slot 2 of `query-font', times its ratio
 \(`agent-shell-math-renderer--x-height-ratio').  The faces at POS and
 their `:height' apply, and so does `text-scale-mode'; so would a
 `:height' on the face `agent-shell-math-renderer', which sets none.
-When no font is found at POS, or it has no glyph for `x', it is
+When POS is outside the accessible part of BUFFER, no font is found
+at POS, or the font has no glyph for `x', it is
 `agent-shell-math-renderer--x-height', which is nil when BUFFER is
 shown in no graphical window.  It mirrors the latex-to-svg front-end's
 function of the same name."
@@ -1253,7 +1254,8 @@ function of the same name."
     (or (when-let* ((win (agent-shell-math-renderer--display-window buffer)))
           (with-selected-frame (window-frame win)
             (with-current-buffer buffer
-              (when-let* ((font (ignore-errors (font-at pos win)))
+              (when-let* ((font (and (<= (point-min) pos) (< pos (point-max))
+                                     (font-at pos win)))
                           (info (query-font font))
                           (ratio (agent-shell-math-renderer--x-height-ratio
                                   (aref info 0) (window-frame win))))
