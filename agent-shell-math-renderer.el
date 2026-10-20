@@ -347,6 +347,38 @@ Customize updates the equations on its own."
 See `agent-shell-math-renderer-failure-mark'."
   :version "29.1")
 
+(defvar agent-shell-math-renderer--obsolete-warned nil
+  "The obsolete options already reported in this session.")
+
+(defun agent-shell-math-renderer--warn-obsolete (option value)
+  "Warn that OPTION is obsolete when VALUE is non-nil, once per session.
+The warning says what `make-obsolete-variable' recorded for OPTION: the
+version and what to set instead.  Emacs reports an obsolete variable
+only when it compiles the code that sets it, which an init file seldom
+is."
+  (when (and value
+             (not (memq option agent-shell-math-renderer--obsolete-warned)))
+    (push option agent-shell-math-renderer--obsolete-warned)
+    (pcase-let ((`(,current ,_ ,version) (get option 'byte-obsolete-variable)))
+      (display-warning
+       'agent-shell-math-renderer
+       (format "`%s' is obsolete since %s; %s" option version
+               (if (stringp current)
+                   current
+                 (format "use `%s' instead." current)))
+       :warning))))
+
+(defconst agent-shell-math-renderer--obsolete-aliases-set
+  (seq-filter (lambda (alias)
+                (or (boundp alias) (get alias 'saved-value)))
+              '(agent-shell-math-renderer-inline-rescale
+                agent-shell-math-renderer-display-rescale
+                agent-shell-math-renderer-background-padding))
+  "The obsolete aliases the user set before this file loaded.
+An alias bound, or saved by Customize, before this file defines it was
+set by the user's init file.  Once the alias exists, setting it cannot
+be told from setting its option: both are one variable.")
+
 ;; Before the defcustoms on purpose, like the padding alias below:
 ;; `defvaralias' discards a value the obsolete name already holds.
 (define-obsolete-variable-alias 'agent-shell-math-renderer-inline-rescale
@@ -444,6 +476,12 @@ string; it applies from cache (no recompile).  Setting it with
 ;; this file loads would silently lose it if the alias came afterwards.
 (define-obsolete-variable-alias 'agent-shell-math-renderer-background-padding
   'agent-shell-math-renderer-padding "0.10.0")
+;; The option it names is obsolete too, so say what to set instead.
+(make-obsolete-variable
+ 'agent-shell-math-renderer-background-padding
+ "set `agent-shell-math-renderer-padding-inline' and \
+`agent-shell-math-renderer-padding-display'."
+ "0.10.0")
 
 (defconst agent-shell-math-renderer--padding-type
   '(choice (const :tag "None" nil)
@@ -2136,8 +2174,34 @@ take effect — use `setopt' or the hook above."
              (when (derived-mode-p 'agent-shell-mode)
                (agent-shell-math-renderer-mode (if value 1 -1))))))
   :group 'agent-shell-math-renderer)
-(make-obsolete-variable 'agent-shell-math-renderer-enabled
-                        'agent-shell-math-renderer-mode "0.6.0")
+(make-obsolete-variable
+ 'agent-shell-math-renderer-enabled
+ "add `agent-shell-math-renderer-mode' to `agent-shell-mode-hook'."
+ "0.6.0")
+
+(defconst agent-shell-math-renderer--obsolete-options
+  '(agent-shell-math-renderer-padding agent-shell-math-renderer-enabled)
+  "The obsolete options reported when they are set non-nil.
+The obsolete aliases are not among them: an alias and its option are
+one variable, so the value does not tell which name the user set.  An
+alias set before this file loaded is reported when it loads (see
+`agent-shell-math-renderer--obsolete-aliases-set').")
+
+(defun agent-shell-math-renderer--obsolete-option-set
+    (symbol newval operation _where)
+  "Report SYMBOL, an obsolete option, when OPERATION sets it to NEWVAL.
+A variable watcher on each of `--obsolete-options'.  It acts on `set'
+only, as `agent-shell-math-renderer--option-changed' does."
+  (when (eq operation 'set)
+    (agent-shell-math-renderer--warn-obsolete symbol newval)))
+
+(dolist (option agent-shell-math-renderer--obsolete-options)
+  (add-variable-watcher option
+                        #'agent-shell-math-renderer--obsolete-option-set)
+  (agent-shell-math-renderer--warn-obsolete option (default-value option)))
+
+(dolist (alias agent-shell-math-renderer--obsolete-aliases-set)
+  (agent-shell-math-renderer--warn-obsolete alias t))
 
 (provide 'agent-shell-math-renderer)
 

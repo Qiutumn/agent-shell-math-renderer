@@ -2223,6 +2223,35 @@ strings, and the buffer font has an x-height of 18."
            '((:event . session-restored))))
         (should-not scheduled)))))
 
+(ert-deftest agent-shell-math-renderer-warns-about-obsolete-options ()
+  ;; Setting an obsolete option non-nil warns once per session, with what
+  ;; `make-obsolete-variable' recorded; nil, and a `let', do not warn.
+  (let ((agent-shell-math-renderer--obsolete-warned nil)
+        (padding (default-value 'agent-shell-math-renderer-padding))
+        (enabled (default-value 'agent-shell-math-renderer-enabled))
+        warnings)
+    (cl-letf (((symbol-function 'display-warning)
+               (lambda (_type message &rest _)
+                 (push message warnings))))
+      (unwind-protect
+          (progn
+            (set-default 'agent-shell-math-renderer-padding nil)
+            (cl-progv '(agent-shell-math-renderer-padding) '(2)
+              nil)
+            (should-not warnings)
+            (set-default 'agent-shell-math-renderer-padding 2)
+            (set-default 'agent-shell-math-renderer-padding 3)
+            (set-default 'agent-shell-math-renderer-enabled t)
+            (should (equal
+                     (reverse warnings)
+                     '("`agent-shell-math-renderer-padding' is obsolete since \
+0.12.0; set `agent-shell-math-renderer-padding-inline' and \
+`agent-shell-math-renderer-padding-display'."
+                       "`agent-shell-math-renderer-enabled' is obsolete since \
+0.6.0; add `agent-shell-math-renderer-mode' to `agent-shell-mode-hook'."))))
+        (set-default 'agent-shell-math-renderer-padding padding)
+        (set-default 'agent-shell-math-renderer-enabled enabled)))))
+
 ;;; --- Versions --------------------------------------------------------------
 
 (defconst agent-shell-math-renderer-tests--repo-root

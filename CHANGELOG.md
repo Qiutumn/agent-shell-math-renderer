@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Setting the obsolete `agent-shell-math-renderer-padding` or
+  `agent-shell-math-renderer-enabled` non-nil shows a warning, once per
+  session, that says what to set instead. Before, Emacs reported them only
+  when it compiled the code that set them, which an init file seldom is.
+  The obsolete names `agent-shell-math-renderer-background-padding`,
+  `agent-shell-math-renderer-inline-rescale` and
+  `agent-shell-math-renderer-display-rescale` warn when they are set before
+  the package loads, as an init file does; set after it loads, they cannot
+  be told from the options they name.
+
 ## [0.16.0] - 2026-10-20
 
 ### Added
