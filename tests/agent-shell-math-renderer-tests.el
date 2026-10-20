@@ -20,6 +20,8 @@
 (require 'ert)
 ;; Defines `text-scale-mode-hook', which a test reads.
 (require 'face-remap)
+;; `lm-header' reads the package's headers in the drift guard.
+(require 'lisp-mnt)
 ;; `display-warning' is autoloaded, and `cl-letf' resolving that autoload loads
 ;; warnings.el, which redefines it -- clobbering a stub installed in the same
 ;; `cl-letf'.  Load it up front so stubbing it is deterministic.
@@ -2218,6 +2220,99 @@ strings, and the buffer font has an x-height of 18."
           (agent-shell-math-renderer--on-session-restored
            '((:event . session-restored))))
         (should-not scheduled)))))
+
+;;; --- Versions --------------------------------------------------------------
+
+(defconst agent-shell-math-renderer-tests--repo-root
+  (expand-file-name ".." (file-name-directory
+                          (or load-file-name buffer-file-name)))
+  "Directory holding the package, `README.md' and `CHANGELOG.md'.")
+
+(defun agent-shell-math-renderer-tests--read-file (file)
+  "Return the contents of FILE, relative to the repository root."
+  (with-temp-buffer
+    (insert-file-contents
+     (expand-file-name file agent-shell-math-renderer-tests--repo-root))
+    (buffer-string)))
+
+(defun agent-shell-math-renderer-tests--header (header)
+  "Return HEADER of the package's source file."
+  (with-temp-buffer
+    (insert (agent-shell-math-renderer-tests--read-file
+             "agent-shell-math-renderer.el"))
+    (lm-header header)))
+
+(defun agent-shell-math-renderer-tests--required-version (package)
+  "Return the version of PACKAGE that `Package-Requires' names."
+  (cadr (assq package (car (read-from-string
+                            (agent-shell-math-renderer-tests--header
+                             "package-requires"))))))
+
+(ert-deftest agent-shell-math-renderer-version-constants-match-the-headers ()
+  ;; Drift guard: `agent-shell-math-renderer-version' is the `Version:'
+  ;; header, and `--backend-version' the backend's floor in
+  ;; `Package-Requires'.
+  (should (equal agent-shell-math-renderer-version
+                 (agent-shell-math-renderer-tests--header "version")))
+  (should (equal agent-shell-math-renderer--backend-version
+                 (agent-shell-math-renderer-tests--required-version
+                  'latex-to-svg-backend))))
+
+(ert-deftest agent-shell-math-renderer-readme-requirements-match-the-header ()
+  ;; Drift guard: the README's requirement lines name the floors in
+  ;; `Package-Requires'.
+  (let ((readme (agent-shell-math-renderer-tests--read-file "README.md")))
+    (should (string-match-p
+             (format "^- \\*\\*Emacs %s\\+\\*\\*$"
+                     (regexp-quote
+                      (agent-shell-math-renderer-tests--required-version
+                       'emacs)))
+             readme))
+    (dolist (package '(agent-shell latex-to-svg-backend))
+      (should (string-match-p
+               (format "^- \\*\\*\\[`%s`\\]([^)]+)\\*\\* (?%s\n? *or newer"
+                       package
+                       (regexp-quote
+                        (agent-shell-math-renderer-tests--required-version
+                         package)))
+               readme)))))
+
+(ert-deftest agent-shell-math-renderer-changelog-not-behind-package-version ()
+  ;; Drift guard: a released section never claims a version the source has
+  ;; not reached.  Between releases the header may run ahead of the newest
+  ;; dated section, with the entries under `[Unreleased]'.
+  (let ((header (agent-shell-math-renderer-tests--header "version"))
+        (changelog (with-temp-buffer
+                     (insert (agent-shell-math-renderer-tests--read-file
+                              "CHANGELOG.md"))
+                     (goto-char (point-min))
+                     (and (re-search-forward "^## \\[\\([0-9.]+\\)\\] - " nil t)
+                          (match-string 1)))))
+    (should (stringp changelog))
+    (should (version<= changelog header))))
+
+(ert-deftest agent-shell-math-renderer-check-backend-version ()
+  "`agent-shell-math-renderer--check-backend-version' signals an error
+when the loaded backend is older than the floor or has no version."
+  (let ((agent-shell-math-renderer-version "0.15.0")
+        (agent-shell-math-renderer--backend-version "0.16.1"))
+    (let ((latex-to-svg-backend-version "0.16.1"))
+      (agent-shell-math-renderer--check-backend-version))
+    (let ((latex-to-svg-backend-version "0.17.0"))
+      (agent-shell-math-renderer--check-backend-version))
+    (let ((latex-to-svg-backend-version "0.16.0"))
+      (should (string-match-p
+               "\\`agent-shell-math-renderer 0\\.15\\.0 needs \
+latex-to-svg-backend 0\\.16\\.1 or newer, but Emacs loaded version \
+0\\.16\\.0 from .+\\.  Update latex-to-svg-backend to 0\\.16\\.1 or \
+newer, then restart Emacs\\'"
+               (cadr (should-error
+                      (agent-shell-math-renderer--check-backend-version))))))
+    (let ((latex-to-svg-backend-version nil))
+      (should (string-match-p
+               "loaded a version older than 0\\.16\\.1 from "
+               (cadr (should-error
+                      (agent-shell-math-renderer--check-backend-version))))))))
 
 (provide 'agent-shell-math-renderer-tests)
 

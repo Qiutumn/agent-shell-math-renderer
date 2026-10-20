@@ -14,13 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preambles load (backend 0.16.0), updates the equations, as setting a
   preamble does. The README's section on a project's preamble describes
   the four options.
+- Loading the package over a `latex-to-svg-backend` older than the one it
+  requires signals an error that names the backend's file and says to
+  update the backend and restart Emacs. Before, an old backend failed at
+  the first equation with an error about a keyword argument such as
+  `:x-height`. `Package-Requires` does not prevent this: straight does
+  not check versions, and after an upgrade in a running Emacs the backend
+  loaded before stays loaded (latex-to-svg issue #12).
+  `agent-shell-math-renderer-version` holds the package's version.
 
 ### Changed
 
-- Requires latex-to-svg-backend 0.16.0 or newer, whose option names
+- Requires latex-to-svg-backend 0.16.1 or newer, whose option names
   (`latex-to-svg-backend-preamble-packages`,
   `latex-to-svg-backend-preamble-macros`) and file lists the README and
-  the watched options use.
+  the watched options use, and whose `latex-to-svg-backend-version` the
+  check at load reads.
 
 ## [0.15.0] - 2026-10-18
 

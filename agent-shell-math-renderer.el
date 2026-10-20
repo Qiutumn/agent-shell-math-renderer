@@ -7,7 +7,7 @@
 ;; Assisted-by: Claude:claude-opus-4-8
 ;; URL: https://github.com/alberti42/agent-shell-math-renderer
 ;; Version: 0.15.0
-;; Package-Requires: ((emacs "29.1") (agent-shell "0.67.1") (latex-to-svg-backend "0.16.0"))
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.67.1") (latex-to-svg-backend "0.16.1"))
 ;; Keywords: tex, llm, math, education
 
 ;; This package is free software; you can redistribute it and/or modify
@@ -86,6 +86,35 @@
 (require 'latex-to-svg-backend)
 (require 'map)
 (require 'seq)
+
+(defconst agent-shell-math-renderer-version "0.15.0"
+  "The version of the loaded package, as in the `Version:' header.")
+
+(defconst agent-shell-math-renderer--backend-version "0.16.1"
+  "The oldest `latex-to-svg-backend' this package works with.
+The same version as in the `Package-Requires' header.")
+
+(defun agent-shell-math-renderer--check-backend-version ()
+  "Signal an error if the loaded backend is older than this package needs.
+The backend's version is `latex-to-svg-backend-version', of the backend
+in memory: after an upgrade in a running Emacs, the file on disk can be
+new while the backend loaded before it is old.  A backend with no
+`latex-to-svg-backend-version' is older than 0.16.1, which added it.
+Called when this file is loaded."
+  (let ((version (bound-and-true-p latex-to-svg-backend-version)))
+    (unless (and (stringp version)
+                 (version<= agent-shell-math-renderer--backend-version version))
+      (error "%s %s needs %s %s or newer, but Emacs loaded %s from %s.  \
+Update %s to %s or newer, then restart Emacs"
+             'agent-shell-math-renderer agent-shell-math-renderer-version
+             'latex-to-svg-backend agent-shell-math-renderer--backend-version
+             (if (stringp version)
+                 (concat "version " version)
+               "a version older than 0.16.1")
+             (or (symbol-file 'latex-to-svg-backend 'defun) "an unknown file")
+             'latex-to-svg-backend agent-shell-math-renderer--backend-version))))
+
+(agent-shell-math-renderer--check-backend-version)
 
 (defgroup agent-shell-math-renderer nil
   "Render LaTeX math in agent-shell's streamed markdown output.
