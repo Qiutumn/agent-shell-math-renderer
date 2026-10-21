@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the package loads, as an init file does; set after it loads, they cannot
   be told from the options they name.
 
+### Changed
+
+- Requires `latex-to-svg-backend` 0.17.0, which renames
+  `latex-to-svg-backend-preamble` to `latex-to-svg-backend-preamble-base`.
+  The old name still works and shows a warning.
+
 ## [0.16.0] - 2026-10-20
 
 ### Added

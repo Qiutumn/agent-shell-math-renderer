@@ -1832,7 +1832,7 @@ strings, and the buffer font has an x-height of 18."
   ;; `.dir-locals.el' (the three preambles, the files two of them load,
   ;; the width of numbered equations, RaTeX's macros) update the equations
   ;; like this package's own options.
-  (dolist (option '(latex-to-svg-backend-preamble
+  (dolist (option '(latex-to-svg-backend-preamble-base
                     latex-to-svg-backend-preamble-packages
                     latex-to-svg-backend-preamble-macros
                     latex-to-svg-backend-preamble-package-files

@@ -80,7 +80,7 @@ inline equation in a heading has the heading's color and size.
   the release with the backslash-escape pass, the right-label render-function
   suppression the hook relies on, and the `session-restored` event that renders
   the prompts of a restored session)
-- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.16.1
+- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.17.0
   or newer (the release with the option names and the two file lists the README uses, and the version constant this package checks when it is loaded) — the backend (equation compile, caching, display-time tint/scale)
   is factored out into this standalone library. All typesetting knobs (LaTeX /
   dvisvgm / RaTeX / texres programs, preamble, cache directory, font scale)
@@ -254,7 +254,7 @@ The same works for the other side-effect-free options (`-delimiters`,
 `-rescale-inline`, `-rescale-display`, the color/box options, and the backend's
 `latex-to-svg-backend-font-scale`).
 The backend's toolchain and preamble options (`latex-to-svg-backend-latex-program`,
-`-dvisvgm-program`, `-preamble`, `-preamble-packages`, `-preamble-macros`,
+`-dvisvgm-program`, `-preamble-base`, `-preamble-packages`, `-preamble-macros`,
 `-cache-directory`) are
 **not** marked safe — a `.dir-locals.el` lives inside the repo, and those feed a
 compiler or run a program, so Emacs will ask before applying them.
@@ -482,7 +482,7 @@ in the
 | `latex-to-svg-backend-preamble-macros` | `""` | A few macros of your own, read at every compile. |
 | `latex-to-svg-backend-preamble-package-files` | `nil` | Files `-preamble-packages` loads, whose edits dump the `.fmt` file again and compile the equations again. |
 | `latex-to-svg-backend-preamble-macro-files` | `nil` | Files `-preamble-macros` loads, whose edits compile the equations again. |
-| `latex-to-svg-backend-preamble` | standalone + amsmath/amssymb/xcolor | The base LaTeX preamble. |
+| `latex-to-svg-backend-preamble-base` | standalone + amsmath/amssymb/xcolor | The document class and base packages; `-preamble-packages` and `-preamble-macros` are appended to it. |
 | `latex-to-svg-backend-latex-program` | `"latex"` | Program compiling LaTeX → DVI. |
 | `latex-to-svg-backend-dvisvgm-program` | `"dvisvgm"` | Program converting DVI → SVG. |
 | `latex-to-svg-backend-cache-directory` | `nil` | Where SVGs are cached; `nil` uses `$XDG_CACHE_HOME/latex-to-svg-backend/`. |
@@ -503,7 +503,7 @@ These options update the equations on their own when you set them, with
 | `agent-shell-math-renderer-padding-inline`, `-padding-display` | the pictures are redrawn from cache |
 | `agent-shell-math-renderer-rescale-inline`, `-rescale-display` | the pictures are redrawn from cache |
 | `agent-shell-math-renderer-center-display-math` | the pictures are redrawn from cache |
-| `latex-to-svg-backend-preamble`, `-preamble-packages`, `-preamble-macros` | the equations are compiled with the new preamble, or taken from cache if compiled with it before |
+| `latex-to-svg-backend-preamble-base`, `-preamble-packages`, `-preamble-macros` | the equations are compiled with the new preamble, or taken from cache if compiled with it before |
 | `latex-to-svg-backend-preamble-package-files`, `-preamble-macro-files` | the equations are compiled with the new list, or taken from cache if compiled with it before |
 | `latex-to-svg-backend-line-width` | the numbered equations are compiled with the new width, or taken from cache if compiled with it before |
 | `latex-to-svg-backend-ratex-macros` | the equations typeset with RaTeX are compiled with the new macros, or taken from cache if compiled with them before |
