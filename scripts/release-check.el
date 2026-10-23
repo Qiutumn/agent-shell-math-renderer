@@ -30,6 +30,9 @@
 ;;   package upgrades only this package; package.el upgrades a dependency
 ;;   only when it is below the required version, so a lower floor leaves
 ;;   them on an old backend;
+;; - MELPA Stable has the `agent-shell' that `Package-Requires' names, or a
+;;   newer one.  Without it, package.el cannot install this release from
+;;   MELPA Stable;
 ;; - the newest dated section of CHANGELOG.md is the version in the
 ;;   `Version:' header, so the release has its section.
 ;;
@@ -57,15 +60,19 @@
   (cadr (assq package (car (read-from-string
                             (release-check--header file "package-requires"))))))
 
-(defun release-check--stable-version (package)
-  "Return the version of PACKAGE on MELPA Stable, as a string, or nil."
+(defun release-check--stable-contents ()
+  "Return MELPA Stable's list of packages, as `package-archive-contents' holds it."
   (with-current-buffer (url-retrieve-synchronously release-check-stable-archive t t 60)
     (goto-char (point-min))
     (re-search-forward "\n\n")
-    (let* ((contents (read (current-buffer)))
-           (entry (assq package (cdr contents))))
-      (kill-buffer)
-      (and entry (package-version-join (aref (cdr entry) 0))))))
+    (prog1 (cdr (read (current-buffer)))
+      (kill-buffer))))
+
+(defun release-check--stable-version (package contents)
+  "Return the version of PACKAGE in CONTENTS, as a string, or nil.
+CONTENTS is what `release-check--stable-contents' returns."
+  (when-let* ((entry (assq package contents)))
+    (package-version-join (aref (cdr entry) 0))))
 
 (defun release-check--changelog-latest ()
   "Return the newest dated version in CHANGELOG.md, or nil."
@@ -77,12 +84,18 @@
 (let* ((version (release-check--header "agent-shell-math-renderer.el" "version"))
        (floor (release-check--required-version "agent-shell-math-renderer.el"
                                                'latex-to-svg-backend))
-       (stable (release-check--stable-version 'latex-to-svg-backend))
+       (contents (release-check--stable-contents))
+       (stable (release-check--stable-version 'latex-to-svg-backend contents))
+       (shell-floor (release-check--required-version "agent-shell-math-renderer.el"
+                                                     'agent-shell))
+       (shell-stable (release-check--stable-version 'agent-shell contents))
        (changelog (release-check--changelog-latest))
        (problems '()))
   (message "Release %s" version)
   (message "  backend required by the renderer: %s; newest on MELPA Stable: %s"
            floor stable)
+  (message "  agent-shell required by the renderer: %s; newest on MELPA Stable: %s"
+           shell-floor shell-stable)
   (message "  newest dated CHANGELOG.md section: %s" changelog)
   (unless stable
     (push "MELPA Stable lists no latex-to-svg-backend" problems))
@@ -96,6 +109,14 @@ but MELPA Stable has %s: raise the floor" floor stable)
     (push (format "agent-shell-math-renderer.el requires latex-to-svg-backend %s, \
 but MELPA Stable has %s: release the backend %s, or wait until MELPA \
 Stable has built it" floor stable floor)
+          problems)))
+  (cond
+   ((null shell-stable)
+    (push "MELPA Stable lists no agent-shell" problems))
+   ((version< shell-stable shell-floor)
+    (push (format "agent-shell-math-renderer.el requires agent-shell %s, \
+but MELPA Stable has %s: wait until MELPA Stable has built agent-shell %s"
+                  shell-floor shell-stable shell-floor)
           problems)))
   (unless (equal changelog version)
     (push (format "CHANGELOG.md's newest dated section is %s, the header says %s"

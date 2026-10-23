@@ -155,8 +155,8 @@ jobs:
   # Before a release: when the version in the header has no tag yet, this
   # commit is (or leads up to) a release, so run the checks that need
   # MELPA Stable (scripts/release-check.el): the renderer must require the
-  # newest backend there, and CHANGELOG.md must have the version's dated
-  # section.  After the tag exists, ordinary pushes skip it.  One Emacs is
+  # newest backend there, MELPA Stable must have the agent-shell it requires,
+  # and CHANGELOG.md must have the version's dated section.  After the tag exists, ordinary pushes skip it.  One Emacs is
   # enough; the result does not depend on the Emacs version.  Develop
   # skips it: it may require a backend that MELPA Stable does not have yet.
   release-check:
