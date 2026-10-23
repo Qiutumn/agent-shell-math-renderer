@@ -1834,9 +1834,9 @@ strings, and the buffer font has an x-height of 18."
   ;; like this package's own options.
   (dolist (option '(latex-to-svg-backend-preamble-base
                     latex-to-svg-backend-preamble-packages
-                    latex-to-svg-backend-preamble-macros
+                    latex-to-svg-backend-preamble-not-precompiled
                     latex-to-svg-backend-preamble-package-files
-                    latex-to-svg-backend-preamble-macro-files
+                    latex-to-svg-backend-preamble-not-precompiled-files
                     latex-to-svg-backend-line-width
                     latex-to-svg-backend-ratex-macros))
     (should (memq #'agent-shell-math-renderer--option-changed
@@ -1848,7 +1848,7 @@ strings, and the buffer font has an x-height of 18."
       (should-not (get option 'byte-obsolete-variable)))))
 
 (ert-deftest agent-shell-math-renderer-option-default-skips-buffers-with-own-value ()
-  ;; A change of `latex-to-svg-backend-preamble-macros''s default
+  ;; A change of `latex-to-svg-backend-preamble-packages''s default
   ;; updates the chats that use the default, not a chat with its own value
   ;; (set by its `.dir-locals.el').  A buffer-local change updates that chat.
   (let ((agent-shell-math-renderer--option-buffers nil)
@@ -1865,14 +1865,14 @@ strings, and the buffer font has an x-height of 18."
             (with-current-buffer buf
               (setq agent-shell-math-renderer--present t)))
           (with-current-buffer own
-            (setq-local latex-to-svg-backend-preamble-macros
+            (setq-local latex-to-svg-backend-preamble-packages
                         "\\input{m}"))
           (should (equal agent-shell-math-renderer--option-buffers (list own)))
           (agent-shell-math-renderer--update-after-option)
           (should (equal updated (list own)))
           (setq updated nil)
-          (let ((latex-to-svg-backend-preamble-macros ""))
-            (setq latex-to-svg-backend-preamble-macros "\\input{g}")
+          (let ((latex-to-svg-backend-preamble-packages ""))
+            (setq latex-to-svg-backend-preamble-packages "\\input{g}")
             (agent-shell-math-renderer--update-after-option)
             (should (equal updated (list uses-default)))))
       (kill-buffer own)

@@ -7,7 +7,7 @@
 ;; Assisted-by: Claude:claude-opus-4-8
 ;; URL: https://github.com/alberti42/agent-shell-math-renderer
 ;; Version: 0.17.0
-;; Package-Requires: ((emacs "29.1") (agent-shell "0.89.1") (latex-to-svg-backend "0.17.0"))
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.89.1") (latex-to-svg-backend "0.18.0"))
 ;; Keywords: tex, llm, math, education
 
 ;; This package is free software; you can redistribute it and/or modify
@@ -90,7 +90,7 @@
 (defconst agent-shell-math-renderer-version "0.17.0"
   "The version of the loaded package, as in the `Version:' header.")
 
-(defconst agent-shell-math-renderer--backend-version "0.17.0"
+(defconst agent-shell-math-renderer--backend-version "0.18.0"
   "The oldest `latex-to-svg-backend' this package works with.
 The same version as in the `Package-Requires' header.")
 
@@ -963,7 +963,8 @@ FAILURE is the plist the backend passes to the callback (see
 `latex-to-svg-backend').  For a `formula' failure it names the engine
 and gives the message: \"LaTeX could not typeset it: MESSAGE.\", or
 \"RaTeX could not parse it: MESSAGE.\".  For a `setup' failure it gives
-the message, which names the program that was not found.  The text
+the message, which names the program that was not found or says that
+the preamble could not be precompiled.  The text
 ends with a full stop, unless it already ends with `.', `!' or `?'.
 With TOOLTIP, when FAILURE has a log, a sentence follows on the same
 line, so that a tooltip shown on one line reads well: \"Call
@@ -1652,9 +1653,9 @@ fast and untouched buffers refresh lazily when next displayed."
     agent-shell-math-renderer-failure-mark
     latex-to-svg-backend-preamble-base
     latex-to-svg-backend-preamble-packages
-    latex-to-svg-backend-preamble-macros
+    latex-to-svg-backend-preamble-not-precompiled
     latex-to-svg-backend-preamble-package-files
-    latex-to-svg-backend-preamble-macro-files
+    latex-to-svg-backend-preamble-not-precompiled-files
     latex-to-svg-backend-line-width
     latex-to-svg-backend-ratex-macros)
   "Options whose change updates the equations on its own.

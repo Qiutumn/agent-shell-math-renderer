@@ -81,8 +81,8 @@ inline equation in a heading has the heading's color and size.
   restored session; the backslash-escape pass, the right-label render-function
   suppression the hook relies on, and the `session-restored` event came in
   earlier releases)
-- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.17.0
-  or newer (the release with the option names and the two file lists the README uses, and the version constant this package checks when it is loaded) — the backend (equation compile, caching, display-time tint/scale)
+- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.18.0
+  or newer (the release with the option names and the file list the README uses, and the version constant this package checks when it is loaded) — the backend (equation compile, caching, display-time tint/scale)
   is factored out into this standalone library. All typesetting knobs (LaTeX /
   dvisvgm / RaTeX / texres programs, preamble, cache directory, font scale)
   live in its `latex-to-svg-backend-*` customization group.
@@ -255,41 +255,38 @@ The same works for the other side-effect-free options (`-delimiters`,
 `-rescale-inline`, `-rescale-display`, the color/box options, and the backend's
 `latex-to-svg-backend-font-scale`).
 The backend's toolchain and preamble options (`latex-to-svg-backend-latex-program`,
-`-dvisvgm-program`, `-preamble-base`, `-preamble-packages`, `-preamble-macros`,
+`-dvisvgm-program`, `-preamble-base`, `-preamble-packages`, `-preamble-not-precompiled`,
 `-cache-directory`) are
 **not** marked safe — a `.dir-locals.el` lives inside the repo, and those feed a
 compiler or run a program, so Emacs will ask before applying them.
 
 A chat started in a project typesets its equations with the project's preamble
-from `.dir-locals.el`, set in one of two backend options:
-
-| Option | Use it for | Treatment |
-| --- | --- | --- |
-| `latex-to-svg-backend-preamble-packages` | LaTeX packages, including your own `.sty` files, which rarely change | dumped into a `.fmt` file of the project and read once; changing them dumps the whole `.fmt` file again |
-| `latex-to-svg-backend-preamble-macros` | a few macros of your own that you change often | read at every compile; an edit dumps nothing |
-
-Files the preamble loads are followed when you list them, each in the list of
-the preamble that loads it:
-
-| Option | Lists the files of | An edit of one |
-| --- | --- | --- |
-| `latex-to-svg-backend-preamble-package-files` | `-preamble-packages`, such as your own `.sty` | dumps the `.fmt` file again, and compiles the equations again |
-| `latex-to-svg-backend-preamble-macro-files` | `-preamble-macros`, such as `macros.tex` | compiles the equations again |
-
-Names are relative to the project root, as for `\input`, or absolute. For
-example:
+from `.dir-locals.el`. The project's packages, and an `\input` of its macro
+files, go in `latex-to-svg-backend-preamble-packages`, which is appended to
+`latex-to-svg-backend-preamble-base` and dumped into a `.fmt` file of the
+project. List the files it loads in
+`latex-to-svg-backend-preamble-package-files`: an edit of one dumps the `.fmt`
+file again, and compiles the equations again. Names are relative to the
+project root, as for `\input`, or absolute. For example:
 
 ```elisp
-((nil . ((latex-to-svg-backend-preamble-packages . "\\usepackage{physics}")
-         (latex-to-svg-backend-preamble-macros . "\\input{macros.tex}")
-         (latex-to-svg-backend-preamble-macro-files . ("macros.tex")))))
+((nil . ((latex-to-svg-backend-preamble-packages
+          . "\\usepackage{physics}\n\\input{macros.tex}")
+         (latex-to-svg-backend-preamble-package-files . ("macros.tex")))))
 ```
+
+`latex-to-svg-backend-preamble-macros` and
+`latex-to-svg-backend-preamble-macro-files` are obsolete since backend 0.18.0:
+put their macro files in `-preamble-packages` and list them in
+`-preamble-package-files`.
 
 The backend README's
 [A project's preamble](https://github.com/alberti42/latex-to-svg-backend#a-projects-preamble)
-compares the two preamble options and gives the details. Answering `!` to
-Emacs's question trusts only that exact value: the next edit of the string
-asks again. The two file lists are `:safe`: the backend only reads their files'
+gives the details. A package that cannot be dumped into the `.fmt` file goes
+in `latex-to-svg-backend-preamble-not-precompiled`: see the backend README's
+[Troubleshooting](https://github.com/alberti42/latex-to-svg-backend#troubleshooting).
+Answering `!` to Emacs's question trusts only that exact value: the next edit
+of the string asks again. The file lists are `:safe`: the backend only reads their files'
 modification times. For a project you trust, list its directory, the one
 holding `.dir-locals.el`, in `safe-local-variable-directories` (Emacs 30.1+);
 Emacs then applies that `.dir-locals.el` without asking.
@@ -480,10 +477,8 @@ in the
 |--------|---------|-------------|
 | `latex-to-svg-backend-font-scale` | `1.0` | Equation size relative to the buffer font (`1.0` = match). |
 | `latex-to-svg-backend-preamble-packages` | `""` | Packages appended to the base, dumped into the `.fmt` file. |
-| `latex-to-svg-backend-preamble-macros` | `""` | A few macros of your own, read at every compile. |
 | `latex-to-svg-backend-preamble-package-files` | `nil` | Files `-preamble-packages` loads, whose edits dump the `.fmt` file again and compile the equations again. |
-| `latex-to-svg-backend-preamble-macro-files` | `nil` | Files `-preamble-macros` loads, whose edits compile the equations again. |
-| `latex-to-svg-backend-preamble-base` | standalone + amsmath/amssymb/xcolor | The document class and base packages; `-preamble-packages` and `-preamble-macros` are appended to it. |
+| `latex-to-svg-backend-preamble-base` | standalone + amsmath/amssymb/xcolor | The document class and base packages; `-preamble-packages` is appended to it. |
 | `latex-to-svg-backend-latex-program` | `"latex"` | Program compiling LaTeX → DVI. |
 | `latex-to-svg-backend-dvisvgm-program` | `"dvisvgm"` | Program converting DVI → SVG. |
 | `latex-to-svg-backend-cache-directory` | `nil` | Where SVGs are cached; `nil` uses `$XDG_CACHE_HOME/latex-to-svg-backend/`. |
@@ -504,8 +499,8 @@ These options update the equations on their own when you set them, with
 | `agent-shell-math-renderer-padding-inline`, `-padding-display` | the pictures are redrawn from cache |
 | `agent-shell-math-renderer-rescale-inline`, `-rescale-display` | the pictures are redrawn from cache |
 | `agent-shell-math-renderer-center-display-math` | the pictures are redrawn from cache |
-| `latex-to-svg-backend-preamble-base`, `-preamble-packages`, `-preamble-macros` | the equations are compiled with the new preamble, or taken from cache if compiled with it before |
-| `latex-to-svg-backend-preamble-package-files`, `-preamble-macro-files` | the equations are compiled with the new list, or taken from cache if compiled with it before |
+| `latex-to-svg-backend-preamble-base`, `-preamble-packages`, `-preamble-not-precompiled` | the equations are compiled with the new preamble, or taken from cache if compiled with it before |
+| `latex-to-svg-backend-preamble-package-files`, `-preamble-not-precompiled-files` | the equations are compiled with the new list, or taken from cache if compiled with it before |
 | `latex-to-svg-backend-line-width` | the numbered equations are compiled with the new width, or taken from cache if compiled with it before |
 | `latex-to-svg-backend-ratex-macros` | the equations typeset with RaTeX are compiled with the new macros, or taken from cache if compiled with them before |
 

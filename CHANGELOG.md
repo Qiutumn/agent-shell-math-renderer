@@ -23,9 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Requires `latex-to-svg-backend` 0.17.0, which renames
+- Requires `latex-to-svg-backend` 0.18.0. Its 0.17.0 renames
   `latex-to-svg-backend-preamble` to `latex-to-svg-backend-preamble-base`.
   The old name still works and shows a warning.
+- The equations follow the names of `latex-to-svg-backend` 0.18.0:
+  setting `latex-to-svg-backend-preamble-not-precompiled` or
+  `latex-to-svg-backend-preamble-not-precompiled-files` updates them.
+  The obsolete `-preamble-macros` and `-preamble-macro-files` still
+  work. The README puts macro files in
+  `latex-to-svg-backend-preamble-packages`, listed in
+  `latex-to-svg-backend-preamble-package-files`.
 - Requires agent-shell 0.89.1 or newer. The prompts of a restored session
   are found with `agent-shell-prompt-ranges`, which agent-shell added for
   this package (xenodium/agent-shell#882), instead of by the
