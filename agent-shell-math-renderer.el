@@ -7,7 +7,7 @@
 ;; Assisted-by: Claude:claude-opus-4-8
 ;; URL: https://github.com/alberti42/agent-shell-math-renderer
 ;; Version: 0.17.0
-;; Package-Requires: ((emacs "29.1") (agent-shell "0.67.1") (latex-to-svg-backend "0.17.0"))
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.89.1") (latex-to-svg-backend "0.17.0"))
 ;; Keywords: tex, llm, math, education
 
 ;; This package is free software; you can redistribute it and/or modify
@@ -2058,28 +2058,21 @@ package's architecture notes for the full history."
   (agent-shell-math-renderer--schedule-submitted-prompt (current-buffer)))
 
 (defun agent-shell-math-renderer--replayed-prompt-regions ()
-  "Return markers around each user prompt a session restore replayed.
-A replayed prompt is the text `agent-shell-ui-update-text' inserted for
-a `user_message_chunk', less the shell prompt before it, which carries
-`field' `output'."
-  (save-excursion
-    (save-restriction
-      (widen)
-      (goto-char (point-min))
-      (let ((regions '()))
-        (while-let ((match (text-property-search-forward
-                            'agent-shell-ui-state nil
-                            (lambda (_ state)
-                              (string-suffix-p
-                               "user_message_chunk"
-                               (or (map-elt state :qualified-id) "")))
-                            t)))
-          (when-let* ((end (prop-match-end match))
-                      (start (text-property-not-all
-                              (prop-match-beginning match) end
-                              'field 'output)))
-            (push (cons (copy-marker start) (copy-marker end)) regions)))
-        (nreverse regions)))))
+  "Return markers around the input of each prompt sent in the current buffer.
+The prompts are those `agent-shell-prompt-ranges' returns, less the live
+prompt, whose input starts at the shell process mark."
+  (save-restriction
+    (widen)
+    (let ((live-start (when-let* ((process (get-buffer-process
+                                            (current-buffer))))
+                        (marker-position (process-mark process)))))
+      (seq-keep (lambda (range)
+                  (let ((start (map-elt range :input-start))
+                        (end (map-elt range :input-end)))
+                    (when (and (< start end)
+                               (or (null live-start) (< start live-start)))
+                      (cons (copy-marker start) (copy-marker end)))))
+                (agent-shell-prompt-ranges)))))
 
 (defun agent-shell-math-renderer--on-session-restored (_event)
   "Render the prompts a session restore replayed in the current buffer.

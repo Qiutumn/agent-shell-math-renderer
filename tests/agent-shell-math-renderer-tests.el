@@ -2195,20 +2195,25 @@ strings, and the buffer font has an x-height of 18."
                         'agent-shell-math-renderer-source)
                        "E=mc^2"))))))
 
+(defun agent-shell-math-renderer-tests--insert-prompt (input &optional sent)
+  "Insert a shell prompt with INPUT, as agent-shell does.
+With SENT, end INPUT with shell-maker's end-of-prompt marker."
+  (insert (propertize "Claude> " 'field 'output
+                      'font-lock-face 'agent-shell-prompt)
+          (propertize input 'font-lock-face 'agent-shell-input))
+  (when sent
+    (insert (propertize "<shell-maker-end-of-prompt>"
+                        'invisible t 'shell-maker--marker t))))
+
 (ert-deftest agent-shell-math-renderer-session-restored-renders-replayed-prompts ()
-  ;; A restore replays each user prompt as a `user_message_chunk', inserted
-  ;; by `agent-shell-ui-update-text' with no markdown render and no
+  ;; A restore replays each user prompt with no markdown render and no
   ;; `input-submitted'.  `session-restored' renders those prompts, without
   ;; the shell prompt before them and without the agent's text.
   (agent-shell-math-renderer-tests--enabled
     (with-temp-buffer
-      (insert (propertize "Claude> " 'field 'output
-                          'agent-shell-ui-state
-                          '((:qualified-id . "1-1-user_message_chunk")))
-              (propertize "\\[\nx^2\n\\]\nand \\(y\\)"
-                          'agent-shell-ui-state
-                          '((:qualified-id . "1-1-user_message_chunk")))
-              "\n\nagent \\(z\\)\n\n")
+      (agent-shell-math-renderer-tests--insert-prompt
+       "\\[\nx^2\n\\]\nand \\(y\\)" t)
+      (insert "\n\nagent \\(z\\)\n\n")
       (let ((agent-shell-math-renderer-render-submitted-prompts t)
             scheduled)
         (cl-letf (((symbol-function 'run-at-time)
@@ -2233,12 +2238,33 @@ strings, and the buffer font has an x-height of 18."
         (should-not (get-text-property (match-beginning 0)
                                        'agent-shell-math-renderer-source))))))
 
+(ert-deftest agent-shell-math-renderer-session-restored-skips-live-prompt ()
+  ;; Text typed into the live prompt during a restore is not sent yet, so
+  ;; it is not rendered.  Its input starts at the process mark.
+  (agent-shell-math-renderer-tests--enabled
+    (with-temp-buffer
+      (agent-shell-math-renderer-tests--insert-prompt "\\(y\\)" t)
+      (insert "\n\n")
+      (agent-shell-math-renderer-tests--insert-prompt "")
+      (let ((process (make-pipe-process :name "agent-shell-math-renderer-test"
+                                        :buffer (current-buffer)
+                                        :noquery t)))
+        (unwind-protect
+            (progn
+              (set-marker (process-mark process) (point))
+              (insert "\\(draft\\)")
+              (should (equal (seq-map
+                              (lambda (region)
+                                (buffer-substring-no-properties
+                                 (car region) (cdr region)))
+                              (agent-shell-math-renderer--replayed-prompt-regions))
+                             '("\\(y\\)"))))
+          (delete-process process))))))
+
 (ert-deftest agent-shell-math-renderer-session-restored-respects-option ()
   (agent-shell-math-renderer-tests--enabled
     (with-temp-buffer
-      (insert (propertize "\\(y\\)"
-                          'agent-shell-ui-state
-                          '((:qualified-id . "1-1-user_message_chunk"))))
+      (agent-shell-math-renderer-tests--insert-prompt "\\(y\\)" t)
       (let ((agent-shell-math-renderer-render-submitted-prompts nil)
             scheduled)
         (cl-letf (((symbol-function 'run-at-time)

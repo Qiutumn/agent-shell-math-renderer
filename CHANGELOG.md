@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires `latex-to-svg-backend` 0.17.0, which renames
   `latex-to-svg-backend-preamble` to `latex-to-svg-backend-preamble-base`.
   The old name still works and shows a warning.
+- Requires agent-shell 0.89.1 or newer. The prompts of a restored session
+  are found with `agent-shell-prompt-ranges`, which agent-shell added for
+  this package (xenodium/agent-shell#882), instead of by the
+  `user_message_chunk` id agent-shell builds internally. Text typed into
+  the live prompt while a session is restored is not rendered.
 
 ## [0.16.0] - 2026-10-20
 
