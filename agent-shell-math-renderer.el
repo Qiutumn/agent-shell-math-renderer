@@ -6,8 +6,8 @@
 ;; Maintainer: Andrea Alberti <a.alberti82@gmail.com>
 ;; Assisted-by: Claude:claude-opus-4-8
 ;; URL: https://github.com/alberti42/agent-shell-math-renderer
-;; Version: 0.17.0
-;; Package-Requires: ((emacs "29.1") (agent-shell "0.89.1") (latex-to-svg-backend "0.18.0"))
+;; Version: 0.17.1
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.89.1") (latex-to-svg-backend "0.18.1"))
 ;; Keywords: tex, llm, math, education
 
 ;; This package is free software; you can redistribute it and/or modify
@@ -70,7 +70,7 @@
 ;; asynchronous; the image is overlaid when ready.  When a program of
 ;; the engine is not found, the backend warns, naming the engine and
 ;; the program, and the source stays as text.  The engine
-;; that typesets (LaTeX, RaTeX without a TeX installation, or texres) is
+;; that typesets (LaTeX, RaTeX, texres, or local MathJax through Node.js) is
 ;; chosen by `agent-shell-math-renderer-engine'.  Backend settings (programs,
 ;; preamble, cache directory, font scale) live in the
 ;; `latex-to-svg-backend-*' customization group.
@@ -87,10 +87,10 @@
 (require 'map)
 (require 'seq)
 
-(defconst agent-shell-math-renderer-version "0.17.0"
+(defconst agent-shell-math-renderer-version "0.17.1"
   "The version of the loaded package, as in the `Version:' header.")
 
-(defconst agent-shell-math-renderer--backend-version "0.18.0"
+(defconst agent-shell-math-renderer--backend-version "0.18.1"
   "The oldest `latex-to-svg-backend' this package works with.
 The same version as in the `Package-Requires' header.")
 
@@ -120,8 +120,8 @@ Update %s to %s or newer, then restart Emacs"
   "Render LaTeX math in agent-shell's streamed markdown output.
 Display equations (`\\=\\[...\\]', `$$...$$', and ```math fences) and
 inline `\\(...\\)' are compiled to SVG, by `latex' + `dvisvgm' or
-by RaTeX (see `agent-shell-math-renderer-engine'), and overlaid on
-the raw LaTeX (kept in the buffer so copy/save round-trips the
+by RaTeX, texres or MathJax (see `agent-shell-math-renderer-engine'),
+and overlaid on the raw LaTeX (kept so copy/save round-trips the
 source)."
   :group 'agent-shell
   :prefix "agent-shell-math-renderer-")
@@ -259,7 +259,7 @@ it is: the stretch cannot pull it left."
   :group 'agent-shell-math-renderer)
 
 (defcustom agent-shell-math-renderer-engine 'latex
-  "Engine that typesets the equations: the symbol `latex', `ratex' or `texres'.
+  "Engine that typesets equations: `latex', `ratex', `texres' or `mathjax'.
 
 `latex' runs `latex' and `dvisvgm': full LaTeX, with any package the
 backend's preamble loads.  `ratex' runs RaTeX's `render-svg': no TeX
@@ -273,20 +273,28 @@ installation.  Where the programs are is set in the backend (see
 `latex-to-svg-backend-ratex-program' and
 `latex-to-svg-backend-texres-program').
 
+`mathjax' runs MathJax locally through Node.js, without a TeX installation.
+Install the MathJax-enabled backend fork and run npm ci in its checkout.
+See `latex-to-svg-backend-mathjax-program',
+`latex-to-svg-backend-mathjax-script' and
+`latex-to-svg-backend-mathjax-macros'.  MathJax reads no LaTeX preamble.
+Unsupported formulas can fall back to LaTeX, as with RaTeX.
+
 Passed to `latex-to-svg-backend' as `:engine'.  Each engine has its
 own cache entries, so switching back and forth does not recompile an
 equation already compiled by both.  Setting it with `setq',
 `setq-local' or Customize updates the equations on its own."
   :type '(choice (const :tag "LaTeX (latex + dvisvgm)" latex)
                  (const :tag "RaTeX (render-svg)" ratex)
-                 (const :tag "texres (pdflatex + pdftocairo)" texres))
-  :safe (lambda (v) (memq v '(latex ratex texres)))
+                 (const :tag "texres (pdflatex + pdftocairo)" texres)
+                 (const :tag "MathJax (Node.js)" mathjax))
+  :safe (lambda (v) (memq v '(latex ratex texres mathjax)))
   :group 'agent-shell-math-renderer)
 
 (defcustom agent-shell-math-renderer-fallback t
   "Whether LaTeX typesets an equation the chosen engine cannot.
 
-When non-nil and `agent-shell-math-renderer-engine' is `ratex', a
+When non-nil and `agent-shell-math-renderer-engine' is `ratex' or `mathjax', a
 formula that engine rejects, such as one using siunitx's `\\SI',
 `\\DeclareMathOperator' or an environment RaTeX lacks, is typeset with
 LaTeX instead: passed to `latex-to-svg-backend' as `:fallback'.  The
@@ -308,10 +316,10 @@ Customize updates the equations on its own."
 (defun agent-shell-math-renderer--fallback-for (engine)
   "Return the fallback engine for an equation typeset by ENGINE, or nil.
 That is `latex' when `agent-shell-math-renderer-fallback' is on and
-ENGINE is `ratex'.  `texres' has none: it typesets with LaTeX, so an
-equation it rejects has a LaTeX error that `latex' rejects too."
+ENGINE is `ratex' or `mathjax'.  `texres' has none: it typesets with
+LaTeX, so an equation it rejects has an error that `latex' rejects too."
   (and agent-shell-math-renderer-fallback
-       (eq engine 'ratex)
+       (memq engine '(ratex mathjax))
        'latex))
 
 (defcustom agent-shell-math-renderer-quiet nil
@@ -576,7 +584,7 @@ shell-maker/comint's `comint-last-input-start' /
 submitted.  Rendering is deferred out of the submit command.
 
 The prompts a restored session replays are rendered too, when
-agent-shell emits `session-restored'."
+`agent-shell' emits `session-restored'."
   :type 'boolean
   :safe #'booleanp
   :group 'agent-shell-math-renderer)
@@ -932,9 +940,10 @@ before each backslash, backquote and apostrophe makes
   (replace-regexp-in-string "[\\`']" "\\\\=\\&" latex))
 
 (defun agent-shell-math-renderer--engine-name (engine)
-  "Return the name of ENGINE to show a user: \"LaTeX\", \"RaTeX\" or \"texres\"."
+  "Return the display name of ENGINE."
   (pcase engine
     ('ratex "RaTeX")
+    ('mathjax "MathJax")
     ('texres "texres")
     (_ "LaTeX")))
 
@@ -1657,10 +1666,11 @@ fast and untouched buffers refresh lazily when next displayed."
     latex-to-svg-backend-preamble-package-files
     latex-to-svg-backend-preamble-not-precompiled-files
     latex-to-svg-backend-line-width
-    latex-to-svg-backend-ratex-macros)
+    latex-to-svg-backend-ratex-macros
+    latex-to-svg-backend-mathjax-macros)
   "Options whose change updates the equations on its own.
 Each has a variable watcher (`agent-shell-math-renderer--option-changed').
-The last seven are the backend's options in the cache key, which a
+The last eight are the backend's options in the cache key, which a
 project sets in `.dir-locals.el'.")
 
 (defvar agent-shell-math-renderer--option-buffers nil
@@ -2077,7 +2087,7 @@ prompt, whose input starts at the shell process mark."
 
 (defun agent-shell-math-renderer--on-session-restored (_event)
   "Render the prompts a session restore replayed in the current buffer.
-agent-shell inserts them without running its markdown renderer and
+`agent-shell' inserts them without running its markdown renderer and
 without emitting `input-submitted'."
   (when (and agent-shell-math-renderer-render-submitted-prompts
              (agent-shell-math-renderer--active-p))

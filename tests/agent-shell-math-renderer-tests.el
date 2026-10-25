@@ -624,7 +624,10 @@ watermark drives incremental rendering.  Returns the buffer string."
           (goto-char (point-max))
           (insert (substring text i end))
           (setq i end))
-        (agent-shell-markdown-replace-markup)))
+        ;; Partial URLs can look like UNC paths on Windows.  These tests
+        ;; exercise streaming, not the host filesystem or network shares.
+        (cl-letf (((symbol-function 'file-exists-p) #'ignore))
+          (agent-shell-markdown-replace-markup))))
     (buffer-string)))
 
 (ert-deftest agent-shell-math-renderer-streaming-display-block-after-link ()
@@ -1769,6 +1772,9 @@ strings, and the buffer font has an x-height of 18."
   (dolist (case '((ratex ratex "Typeset with RaTeX: \\{ f'(x) \\}")
                   (latex latex "Typeset with LaTeX: \\{ f'(x) \\}")
                   (texres texres "Typeset with texres: \\{ f'(x) \\}")
+                  (mathjax mathjax "Typeset with MathJax: \\{ f'(x) \\}")
+                  (mathjax latex
+                           "Typeset with LaTeX (MathJax could not parse it): \\{ f'(x) \\}")
                   (ratex latex
                          "Typeset with LaTeX (RaTeX could not parse it): \\{ f'(x) \\}")))
     (let ((agent-shell-math-renderer-engine (nth 0 case))
@@ -1795,7 +1801,7 @@ strings, and the buffer font has an x-height of 18."
           ;; Asked with the string and arguments the image was requested with.
           (should (equal queried
                          (list "\\[ \\{ f'(x) \\} \\]" (nth 0 case)
-                               (and (eq (nth 0 case) 'ratex) 'latex))))
+                               (and (memq (nth 0 case) '(ratex mathjax)) 'latex))))
           (should (equal (nth 2 case)
                          (substitute-command-keys
                           (get-text-property (point-min) 'help-echo)))))))))
@@ -1974,11 +1980,12 @@ strings, and the buffer font has an x-height of 18."
       (should (equal "$a+b$" (caar calls))))))
 
 (ert-deftest agent-shell-math-renderer-engine-safe-values ()
-  ;; A file-local engine is safe for the three engines and nothing else.
+  ;; A file-local engine is safe for the four engines and nothing else.
   (let ((safe (get 'agent-shell-math-renderer-engine 'safe-local-variable)))
     (should (funcall safe 'latex))
     (should (funcall safe 'ratex))
     (should (funcall safe 'texres))
+    (should (funcall safe 'mathjax))
     (should-not (funcall safe nil))
     (should-not (funcall safe 'pdflatex))))
 
@@ -2395,6 +2402,14 @@ newer, then restart Emacs\\'"
                "loaded a version older than 0\\.16\\.1 from "
                (cadr (should-error
                       (agent-shell-math-renderer--check-backend-version))))))))
+
+(ert-deftest agent-shell-math-renderer-mathjax-options ()
+  (let ((agent-shell-math-renderer-fallback t))
+    (should (eq 'latex (agent-shell-math-renderer--fallback-for 'mathjax))))
+  (let ((agent-shell-math-renderer-fallback nil))
+    (should-not (agent-shell-math-renderer--fallback-for 'mathjax)))
+  (should (memq 'latex-to-svg-backend-mathjax-macros
+                agent-shell-math-renderer--watched-options)))
 
 (provide 'agent-shell-math-renderer-tests)
 

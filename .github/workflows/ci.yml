@@ -31,6 +31,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -49,39 +50,15 @@ jobs:
       - name: Report version
         run: emacs --version | head -1
 
-      # `package-refresh-contents' downloads MELPA's archive-contents in one
-      # piece.  A truncated response leaves package.el reporting "Failed to
-      # download 'melpa' archive: End of file during parsing" and carrying on
-      # with no MELPA package registered, so the installs below fail on an
-      # otherwise healthy runner.  Fetch again rather than trust one request.
-      - name: Install the dependencies from MELPA
-        if: github.ref_name != 'develop' && github.head_ref != 'develop'
-        run: |
-          for attempt in 1 2 3; do
-            if emacs -Q -batch --eval '(progn
-              (require (quote package))
-              (add-to-list (quote package-archives)
-                           (cons "melpa" "https://melpa.org/packages/") t)
-              (package-initialize)
-              (package-refresh-contents)
-              (package-install (quote agent-shell))
-              (package-install (quote latex-to-svg-backend)))'; then
-              exit 0
-            fi
-            echo "MELPA fetch failed (attempt $attempt of 3); retrying in 15s"
-            sleep 15
-          done
-          exit 1
+      # MathJax is provided by the companion fork, not upstream MELPA.
+      - uses: actions/checkout@v4
+        with:
+          repository: Qiutumn/latex-to-svg-backend
+          ref: main
+          path: .ci/latex-to-svg-backend
 
-      # The same, but with the backend from its develop branch.
-      # `package-install-file' on the checkout installs it as MELPA's
-      # package would be, under the version in its header.
-      - name: Install the dependencies, the backend from its develop branch
-        if: github.ref_name == 'develop' || github.head_ref == 'develop'
+      - name: Install agent-shell and the companion backend
         run: |
-          git clone --depth 1 -b develop \
-            https://github.com/alberti42/latex-to-svg-backend.git \
-            "$RUNNER_TEMP/latex-to-svg-backend"
           for attempt in 1 2 3; do
             if emacs -Q -batch --eval '(progn
               (require (quote package))
@@ -91,12 +68,9 @@ jobs:
               (package-refresh-contents)
               (package-install (quote agent-shell))
               (package-install-file
-               (file-name-as-directory
-                (expand-file-name "latex-to-svg-backend"
-                                  (getenv "RUNNER_TEMP")))))'; then
+               (file-name-as-directory (expand-file-name ".ci/latex-to-svg-backend"))))'; then
               exit 0
             fi
-            echo "MELPA fetch failed (attempt $attempt of 3); retrying in 15s"
             sleep 15
           done
           exit 1
@@ -160,7 +134,7 @@ jobs:
   # enough; the result does not depend on the Emacs version.  Develop
   # skips it: it may require a backend that MELPA Stable does not have yet.
   release-check:
-    if: github.ref_name != 'develop' && github.head_ref != 'develop'
+    if: github.repository == 'alberti42/agent-shell-math-renderer' && github.ref_name != 'develop' && github.head_ref != 'develop'
     runs-on: ubuntu-latest
     name: Release check
     steps:

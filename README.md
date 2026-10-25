@@ -1,5 +1,62 @@
 # agent-shell-math-renderer
 
+## MathJax support in this fork
+
+This fork adds `agent-shell-math-renderer-engine 'mathjax` using the companion
+[Qiutumn/latex-to-svg-backend](https://github.com/Qiutumn/latex-to-svg-backend)
+fork, version 0.18.1. Upstream MELPA packages alone do not include this engine.
+MathJax 4.1.3 runs locally with Node.js 20 or newer, without a TeX installation
+or a browser. After the initial npm install, rendering needs no network access.
+
+Install `agent-shell` 0.89.1 or newer and its dependencies from MELPA, then
+clone both forks into a directory of your choice:
+
+```sh
+git clone https://github.com/Qiutumn/latex-to-svg-backend.git
+git clone https://github.com/Qiutumn/agent-shell-math-renderer.git
+cd latex-to-svg-backend
+npm ci --ignore-scripts
+```
+
+Add the two full checkout directories to Emacs's load path (use your actual
+absolute paths; forward slashes work on Windows). Keep the backend's
+`mathjax-render.cjs`, `package.json`, `package-lock.json` and `node_modules`
+together. Restart Emacs if an older backend is already loaded.
+
+```elisp
+(add-to-list 'load-path "/path/to/latex-to-svg-backend")
+(add-to-list 'load-path "/path/to/agent-shell-math-renderer")
+(require 'agent-shell-math-renderer)
+(setq agent-shell-math-renderer-engine 'mathjax
+      ;; Use nil on machines without latex + dvisvgm.
+      agent-shell-math-renderer-fallback nil)
+(add-hook 'agent-shell-mode-hook #'agent-shell-math-renderer-mode)
+```
+
+If Emacs cannot find Node, set `latex-to-svg-backend-mathjax-program` to its
+absolute executable path, for example `"C:/Program Files/nodejs/node.exe"`.
+If your package manager installs only Lisp files, set
+`latex-to-svg-backend-mathjax-script` to `mathjax-render.cjs` in the full backend
+checkout where you ran `npm ci`.
+
+The same inline `\(…\)`, display `\[…\]` / `$$…$$`, and fenced `math` forms
+work with MathJax. SVGs retain theme tinting, text-size scaling, inline baseline
+alignment and disk caching. Use `latex-to-svg-backend-mathjax-macros` for
+`\newcommand` / `\def` definitions; changing it updates the equations.
+
+MathJax supports mathematical TeX, not arbitrary LaTeX packages or a document
+preamble. The helper loads base, AMS, newcommand, configmacros, color,
+mathtools, boldsymbol, braket, cancel, enclose and textmacros locally;
+`\require` and automatic extension loading are disabled. Unsupported formulas
+remain readable source with the existing error indicator. Set
+`agent-shell-math-renderer-fallback` to `t` to retry those formulas with LaTeX
+when `latex` and `dvisvgm` are installed. Missing Node or npm dependencies are
+setup errors and can be retried after fixing installation. Use
+`C-u M-x agent-shell-math-renderer-refresh` to force a fresh compile.
+
+The installation recipes below are retained from upstream for the original
+engines. Use the two-fork setup above for MathJax.
+
 ![Made for GNU Emacs](https://img.shields.io/badge/Made%20for-GNU%20Emacs-7F5AB6?logo=gnuemacs&logoColor=white)
 [![MELPA](https://melpa.org/packages/agent-shell-math-renderer-badge.svg)](https://melpa.org/#/agent-shell-math-renderer)
 [![MELPA Stable](https://stable.melpa.org/packages/agent-shell-math-renderer-badge.svg)](https://stable.melpa.org/#/agent-shell-math-renderer)
@@ -81,7 +138,7 @@ inline equation in a heading has the heading's color and size.
   restored session; the backslash-escape pass, the right-label render-function
   suppression the hook relies on, and the `session-restored` event came in
   earlier releases)
-- **[`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend)** 0.18.0
+- **[`latex-to-svg-backend`](https://github.com/Qiutumn/latex-to-svg-backend)** 0.18.1
   or newer (the release with the option names and the file list the README uses, and the version constant this package checks when it is loaded) — the backend (equation compile, caching, display-time tint/scale)
   is factored out into this standalone library. All typesetting knobs (LaTeX /
   dvisvgm / RaTeX / texres programs, preamble, cache directory, font scale)
@@ -328,6 +385,7 @@ equations:
 | `latex` (default) | `latex` + `dvisvgm` | Full LaTeX, with any package the backend's preamble loads. |
 | `ratex` | RaTeX's `render-svg` | The math KaTeX supports, with no packages and no TeX installation. |
 | `texres` | the `pdflatex` of [texres](https://github.com/leoliu0/texres) + `pdftocairo` | Full LaTeX, with the LaTeX engine's preamble options, and no TeX Live installation. |
+| `mathjax` | Node.js + local MathJax 4.1.3 | Mathematical TeX with no TeX installation; see [MathJax setup](#mathjax-support-in-this-fork). |
 
 The choice is passed to the backend with each equation. Where the programs
 are is a backend setting (`latex-to-svg-backend-latex-program`,

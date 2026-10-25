@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-25
+
+### Added (Qiutumn fork)
+
+- Select MathJax with `agent-shell-math-renderer-engine` using the companion
+  MathJax-enabled `latex-to-svg-backend` fork (0.18.1). Supports inline,
+  display and fenced math, cached SVG, theme changes and optional LaTeX fallback.
+- Installation instructions for Node.js and the two forks, and regression
+  coverage for engine selection, tooltips and macro option updates.
+
 ## [0.17.0] - 2026-10-23
 
 ### Added

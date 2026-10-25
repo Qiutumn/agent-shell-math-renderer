@@ -52,7 +52,7 @@ jobs:
       # `latex-to-svg-backend-version', so that melpazoid checks the rest
       # against the backend MELPA has.
       - name: Lower the backend floor to the backend on MELPA
-        if: github.ref_name == 'develop' || github.head_ref == 'develop'
+        if: github.repository != 'alberti42/agent-shell-math-renderer' || github.ref_name == 'develop' || github.head_ref == 'develop'
         run: |
           sed -i 's/^(defconst agent-shell-math-renderer--backend-version "[0-9.]*"$/(defconst agent-shell-math-renderer--backend-version "0.16.1"/' \
             agent-shell-math-renderer.el
