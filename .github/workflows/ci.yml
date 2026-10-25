@@ -3,12 +3,8 @@
 #
 # The package `require's agent-shell, so loading it -- and thus the tests --
 # pulls the whole agent-shell stack (agent-shell itself plus shell-maker and
-# acp) and latex-to-svg-backend.  package.el installs them from MELPA, which
-# is where a user gets them too, so a dependency that changes under this
-# package shows up here rather than in a user's report.  On develop, and on
-# a pull request from it, package.el installs latex-to-svg-backend from the
-# backend's own develop branch instead, which holds the backend that
-# develop here needs before MELPA has it.  Every later step calls
+# acp) and latex-to-svg-backend.  package.el installs agent-shell from
+# MELPA and the MathJax backend from the companion fork.  Later steps call
 # `package-initialize' to put them on the load-path.
 #
 # The suite needs no TeX toolchain, no graphical display and no Emacs built

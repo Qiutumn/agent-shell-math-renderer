@@ -61,7 +61,7 @@ engines. Use the two-fork setup above for MathJax.
 [![MELPA](https://melpa.org/packages/agent-shell-math-renderer-badge.svg)](https://melpa.org/#/agent-shell-math-renderer)
 [![MELPA Stable](https://stable.melpa.org/packages/agent-shell-math-renderer-badge.svg)](https://stable.melpa.org/#/agent-shell-math-renderer)
 [![melpazoid](https://github.com/alberti42/agent-shell-math-renderer/actions/workflows/melpazoid.yml/badge.svg)](https://github.com/alberti42/agent-shell-math-renderer/actions/workflows/melpazoid.yml)
-[![CI](https://github.com/alberti42/agent-shell-math-renderer/actions/workflows/ci.yml/badge.svg)](https://github.com/alberti42/agent-shell-math-renderer/actions/workflows/ci.yml)
+[![CI](https://github.com/Qiutumn/agent-shell-math-renderer/actions/workflows/ci.yml/badge.svg)](https://github.com/Qiutumn/agent-shell-math-renderer/actions/workflows/ci.yml)
 [![License: GPL-3.0](https://img.shields.io/github/license/alberti42/agent-shell-math-renderer)](LICENSE)
 
 Render LaTeX math in [`agent-shell`](https://github.com/xenodium/agent-shell)'s
@@ -513,8 +513,8 @@ group (`M-x customize-group RET agent-shell-math-renderer`):
 | `agent-shell-math-renderer-delimiters` | `(bracket dollar)` | Which display delimiters to recognize: `bracket` (`\[…\]`) and/or `dollar` (`$$…$$`). |
 | `agent-shell-math-renderer-fence-languages` | `("math")` | Fenced-code languages rendered as display math. Add `"latex"`/`"tex"` if your agent emits display math under those tags; `nil` leaves every fence as code. |
 | `agent-shell-math-renderer-render-inline` | `t` | Recognize inline `\(…\)` math. |
-| `agent-shell-math-renderer-engine` | `latex` | Engine that typesets the equations: `latex` (`latex` + `dvisvgm`), `ratex` (RaTeX's `render-svg`) or `texres` (the `pdflatex` of texres + `pdftocairo`). See [Engine](#engine). Setting it updates the equations on its own. |
-| `agent-shell-math-renderer-fallback` | `t` | Typeset with LaTeX an equation the engine rejects, when the engine is `ratex`. See [Falling back to LaTeX](#falling-back-to-latex). |
+| `agent-shell-math-renderer-engine` | `latex` | Engine that typesets the equations: `latex` (`latex` + `dvisvgm`), `ratex` (RaTeX's `render-svg`), `texres` (`pdflatex` + `pdftocairo`), or `mathjax` (local Node.js). See [Engine](#engine). Setting it updates the equations on its own. |
+| `agent-shell-math-renderer-fallback` | `t` | Typeset with LaTeX an equation rejected by `ratex` or `mathjax`. See [Falling back to LaTeX](#falling-back-to-latex). |
 | `agent-shell-math-renderer-quiet` | `nil` | Drop the backend's warning about an equation it cannot typeset. Configuration problems still warn. See [Quiet failures](#quiet-failures). |
 | `agent-shell-math-renderer-failure-mark` | `t` | Show a warning icon before an equation that no engine could typeset. See [Failed equations](#failed-equations). |
 | `agent-shell-math-renderer-rescale-inline` | `1.0` | Size multiplier for inline `\(…\)` math, on top of the backend's `latex-to-svg-backend-font-scale`. Re-scales from cache; setting it updates the equations on its own. |
@@ -561,6 +561,7 @@ These options update the equations on their own when you set them, with
 | `latex-to-svg-backend-preamble-package-files`, `-preamble-not-precompiled-files` | the equations are compiled with the new list, or taken from cache if compiled with it before |
 | `latex-to-svg-backend-line-width` | the numbered equations are compiled with the new width, or taken from cache if compiled with it before |
 | `latex-to-svg-backend-ratex-macros` | the equations typeset with RaTeX are compiled with the new macros, or taken from cache if compiled with them before |
+| `latex-to-svg-backend-mathjax-macros` | the equations typeset with MathJax are compiled with the new macros, or taken from cache if compiled with them before |
 
 Where the change applies depends on how you make it:
 
@@ -589,7 +590,8 @@ Other options apply to equations rendered afterwards.
 - Typesetting is delegated to [`latex-to-svg-backend`](https://github.com/alberti42/latex-to-svg-backend):
   with the `latex` engine each equation is compiled by a standalone LaTeX
   document → DVI (`latex`) → SVG (`dvisvgm --no-fonts --exact-bbox
-  --currentcolor`); with `ratex`, by RaTeX's `render-svg`. Compilation is
+  --currentcolor`); with `ratex`, by RaTeX's `render-svg`; with `mathjax`,
+  by the bundled Node.js helper and local MathJax packages. Compilation is
   **asynchronous** and off the output path, so its latency is masked by the
   agent's own streaming.
 - The SVG is **cached on disk** keyed by content (LaTeX + preamble + style), so
